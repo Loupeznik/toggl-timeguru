@@ -146,7 +146,11 @@ Located in `processor.rs`:
 - Sums durations per group
 - Sorts by total duration (descending)
 
-**Duration rounding**: `GroupedTimeEntry::rounded_duration(round_to_minutes)` rounds to nearest N minutes for cleaner reporting.
+**Duration rounding**: `GroupedTimeEntry::rounded_duration(round_to_minutes)` rounds **up** to the next N-minute interval for cleaner reporting. For example, with 15-minute rounding:
+- 22.2 minutes (0.37h) → 30 minutes (0.5h)
+- 69.6 minutes (1.16h) → 75 minutes (1.25h)
+
+This uses `ceil()` to always round up, never down.
 
 ### Database Schema
 
@@ -203,6 +207,14 @@ Several functions/methods have `#[allow(dead_code)]` because they're planned for
 
 ### TUI Footer Bug
 The footer shows inverted text: when grouped view is ON, it says "Toggle grouping (OFF)". This is intentional in the code but reads awkwardly - may need UX improvement in Phase 2.
+
+### Missing Feature: Project Assignment
+Currently, the application can only **read** time entries and their associated projects. There is no functionality to **assign** or **reassign** a time entry (or group of entries) to a different project. This would require:
+- Adding a PUT endpoint to `TogglClient` for updating time entries
+- UI/CLI commands to select entries and assign them to a project
+- Potentially batch update support for grouped entries
+
+This is a candidate for Phase 2 or Phase 3 depending on user needs.
 
 ## Development Workflow
 

@@ -8,7 +8,7 @@ A powerful CLI tool for managing and analyzing Toggl Track time entries, built w
 - **Interactive TUI** for browsing time entries with vim-style navigation
 - **Group entries** by description with automatic duration summation
 - **Filter entries** by date range, project, and tags
-- **Duration rounding** for easy time reporting
+- **Duration rounding** (rounds up to next interval) for easy time reporting
 - **Offline support** via local caching
 - **Fast and efficient** native Rust performance
 
@@ -53,7 +53,8 @@ toggl-timeguru config --set-token YOUR_TOKEN
 # Set default date range (in days)
 toggl-timeguru config --set-date-range 7
 
-# Set duration rounding (in minutes)
+# Set duration rounding (in minutes, rounds UP to next interval)
+# Example: 15 rounds to quarter hours (0.25h, 0.5h, 0.75h, 1.0h, etc.)
 toggl-timeguru config --set-round-minutes 15
 
 # Show current configuration
