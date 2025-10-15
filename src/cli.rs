@@ -1,0 +1,97 @@
+use chrono::{DateTime, Local, TimeZone, Utc};
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "toggl-timeguru")]
+#[command(author, version, about, long_about = None)]
+pub struct Cli {
+    #[arg(short, long, help = "Toggl API token")]
+    pub api_token: Option<String>,
+
+    #[arg(short = 'c', long, help = "Path to configuration file")]
+    pub config: Option<String>,
+
+    #[arg(short = 'v', long, help = "Enable verbose logging")]
+    pub verbose: bool,
+
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    #[command(about = "Configure the application (set API token, preferences)")]
+    Config {
+        #[arg(long, help = "Set Toggl API token")]
+        set_token: Option<String>,
+
+        #[arg(long, help = "Set default date range in days")]
+        set_date_range: Option<i64>,
+
+        #[arg(long, help = "Set rounding duration in minutes")]
+        set_round_minutes: Option<i64>,
+
+        #[arg(long, help = "Show current configuration")]
+        show: bool,
+    },
+
+    #[command(about = "List time entries")]
+    List {
+        #[arg(short, long, help = "Start date (ISO 8601 format or YYYY-MM-DD)")]
+        start: Option<String>,
+
+        #[arg(short, long, help = "End date (ISO 8601 format or YYYY-MM-DD)")]
+        end: Option<String>,
+
+        #[arg(short, long, help = "Filter by project ID")]
+        project: Option<i64>,
+
+        #[arg(short = 't', long, help = "Filter by tag")]
+        tag: Option<String>,
+
+        #[arg(short = 'g', long, help = "Group entries by description")]
+        group: bool,
+
+        #[arg(long, help = "Use cached data (offline mode)")]
+        offline: bool,
+    },
+
+    #[command(about = "Sync time entries from Toggl to local database")]
+    Sync {
+        #[arg(short, long, help = "Start date for sync")]
+        start: Option<String>,
+
+        #[arg(short, long, help = "End date for sync")]
+        end: Option<String>,
+    },
+
+    #[command(about = "Interactive TUI mode")]
+    Tui {
+        #[arg(short, long, help = "Start date")]
+        start: Option<String>,
+
+        #[arg(short, long, help = "End date")]
+        end: Option<String>,
+    },
+}
+
+impl Cli {
+    pub fn parse_date(date_str: &str) -> anyhow::Result<DateTime<Utc>> {
+        if let Ok(dt) = DateTime::parse_from_rfc3339(date_str) {
+            return Ok(dt.with_timezone(&Utc));
+        }
+
+        if let Ok(naive) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+            let local = naive
+                .and_hms_opt(0, 0, 0)
+                .ok_or_else(|| anyhow::anyhow!("Invalid time"))?;
+            return Ok(Local
+                .from_local_datetime(&local)
+                .single()
+                .ok_or_else(|| anyhow::anyhow!("Invalid datetime"))?
+                .with_timezone(&Utc));
+        }
+
+        anyhow::bail!("Invalid date format. Use ISO 8601 (YYYY-MM-DDTHH:MM:SSZ) or YYYY-MM-DD")
+    }
+}

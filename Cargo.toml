@@ -21,6 +21,8 @@ ring = "0.17"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+base64 = "0.22"
+dirs = "5.0"
 
 [dev-dependencies]
 mockito = "1.6"
