@@ -2,64 +2,68 @@
 
 This document tracks the development progress across all phases of the Toggl TimeGuru project.
 
-## Phase 1: MVP - Core Functionality
+## Phase 1: MVP - Core Functionality ✅ COMPLETED
 
 ### Setup & Foundation
 - [x] Initialize Rust project with Cargo
 - [x] Configure dependencies in Cargo.toml
 - [x] Create project documentation structure
-- [ ] Set up project module structure (src/toggl/, src/ui/, src/db/, src/config/)
-- [ ] Configure tracing for structured logging
-- [ ] Set up rustfmt for code formatting
-- [ ] Configure clippy for linting
-- [ ] Set up pre-commit hooks or development scripts
-- [ ] Add formatting and linting checks to development workflow
+- [x] Set up project module structure (src/toggl/, src/ui/, src/db/, src/config/)
+- [x] Configure tracing for structured logging
+- [x] Set up rustfmt for code formatting
+- [x] Configure clippy for linting
+- [x] Set up pre-commit hooks or development scripts
+- [x] Add formatting and linting checks to development workflow
 
 ### Toggl API Integration
-- [ ] Implement Toggl API client module
-- [ ] Add authentication via API token
-- [ ] Implement fetch time entries endpoint
-- [ ] Add basic error handling for API responses
-- [ ] Create data models for time entries using serde
+- [x] Implement Toggl API client module
+- [x] Add authentication via API token
+- [x] Implement fetch time entries endpoint
+- [x] Add basic error handling for API responses
+- [x] Create data models for time entries using serde
 
 ### Configuration Management
-- [ ] Design configuration structure
-- [ ] Implement config loading/saving with confy
-- [ ] Add API token storage with encryption using ring
-- [ ] Store user preferences (default date range, report format)
-- [ ] Create default configuration generator
+- [x] Design configuration structure
+- [x] Implement config loading/saving with confy
+- [x] Add API token storage with encryption using ring
+- [x] Store user preferences (default date range, report format)
+- [x] Create default configuration generator
 
 ### Data Storage
-- [ ] Design SQLite database schema
-- [ ] Implement database connection module
-- [ ] Create time_entries table
-- [ ] Add basic CRUD operations for time entries
+- [x] Design SQLite database schema
+- [x] Implement database connection module
+- [x] Create time_entries table
+- [x] Add basic CRUD operations for time entries
 
 ### Terminal UI
-- [ ] Set up ratatui with crossterm backend
-- [ ] Create main application loop
-- [ ] Implement basic time entries list view
-- [ ] Add simple navigation (up/down, quit)
-- [ ] Display time entry details (description, duration, project)
+- [x] Set up ratatui with crossterm backend
+- [x] Create main application loop
+- [x] Implement basic time entries list view
+- [x] Add simple navigation (up/down, quit)
+- [x] Display time entry details (description, duration, project)
+- [x] Add grouping toggle (g key)
+- [x] Add rounding toggle (r key)
 
 ### Time Entry Processing
-- [ ] Implement date range filtering
-- [ ] Add time entry grouping by exact description match
-- [ ] Calculate total duration for grouped entries
-- [ ] Implement duration rounding functionality
+- [x] Implement date range filtering
+- [x] Add time entry grouping by exact description match
+- [x] Calculate total duration for grouped entries
+- [x] Implement duration rounding functionality (rounds UP)
 
 ### CLI Interface
-- [ ] Design command-line arguments structure with clap
-- [ ] Add date range parameters
-- [ ] Add configuration file path option
-- [ ] Implement help text and usage examples
+- [x] Design command-line arguments structure with clap
+- [x] Add date range parameters
+- [x] Add configuration file path option
+- [x] Implement help text and usage examples
 
 ### Testing & Polish
-- [ ] Add unit tests for API client (using mockito)
-- [ ] Test configuration management
-- [ ] Test time entry grouping logic
-- [ ] Basic error handling improvements
-- [ ] Create initial README with setup instructions
+- [x] Add unit tests for API client
+- [x] Test time entry grouping logic
+- [x] Test rounding logic with comprehensive unit tests
+- [x] Basic error handling improvements
+- [x] Create initial README with setup instructions
+- [x] Fix date format and timezone issues
+- [x] All clippy warnings resolved
 
 ## Phase 2: Enhanced Functionality
 
@@ -115,6 +119,14 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [ ] Add performance metrics logging
 
 ## Phase 3: Additional Features
+
+### TUI Testing
+- [ ] Research Ratatui TestBackend for TUI testing
+- [ ] Add unit tests for keyboard event handlers
+- [ ] Add integration tests for state transitions (grouping toggle, rounding toggle)
+- [ ] Implement UI snapshot tests for rendering output
+- [ ] Test navigation edge cases (empty lists, wrapping)
+- [ ] Add tests for footer status display
 
 ### Security Enhancements
 - [ ] Evaluate keyring crate for API token storage
