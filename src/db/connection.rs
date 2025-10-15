@@ -122,7 +122,6 @@ impl Database {
             .context("Failed to parse time entries from database")
     }
 
-    #[allow(dead_code)]
     pub fn save_projects(&self, projects: &[Project]) -> Result<usize> {
         let mut count = 0;
         let now = Utc::now().to_rfc3339();
@@ -150,6 +149,39 @@ impl Database {
         }
 
         Ok(count)
+    }
+
+    pub fn get_projects(&self) -> Result<Vec<Project>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, workspace_id, client_id, name, is_private, active, at, created_at, color, billable
+             FROM projects
+             WHERE active = 1
+             ORDER BY name ASC",
+        )?;
+
+        let projects = stmt.query_map([], |row| {
+            Ok(Project {
+                id: row.get(0)?,
+                workspace_id: row.get(1)?,
+                client_id: row.get(2)?,
+                name: row.get(3)?,
+                is_private: row.get::<_, i32>(4)? != 0,
+                active: row.get::<_, i32>(5)? != 0,
+                at: row.get::<_, String>(6)?.parse().unwrap(),
+                created_at: row.get::<_, String>(7)?.parse().unwrap(),
+                color: row.get(8)?,
+                billable: row.get::<_, Option<i32>>(9)?.map(|b| b != 0),
+                template: None,
+                auto_estimates: None,
+                estimated_hours: None,
+                rate: None,
+                currency: None,
+            })
+        })?;
+
+        projects
+            .collect::<Result<Vec<_>, _>>()
+            .context("Failed to parse projects from database")
     }
 
     pub fn update_sync_metadata(

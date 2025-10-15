@@ -10,11 +10,14 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
-use crate::toggl::models::{GroupedTimeEntry, TimeEntry};
+use crate::processor::TimeEntryFilter;
+use crate::toggl::models::{GroupedTimeEntry, Project, TimeEntry};
+use std::collections::HashMap;
 
 pub struct App {
     pub time_entries: Vec<TimeEntry>,
     pub grouped_entries: Vec<GroupedTimeEntry>,
+    pub all_entries: Vec<TimeEntry>,
     pub list_state: ListState,
     pub should_quit: bool,
     pub start_date: DateTime<Utc>,
@@ -22,6 +25,9 @@ pub struct App {
     pub show_grouped: bool,
     pub show_rounded: bool,
     pub round_minutes: Option<i64>,
+    pub projects: HashMap<i64, Project>,
+    pub show_filter_panel: bool,
+    pub active_filter: TimeEntryFilter,
 }
 
 impl App {
@@ -30,15 +36,21 @@ impl App {
         start_date: DateTime<Utc>,
         end_date: DateTime<Utc>,
         round_minutes: Option<i64>,
+        projects: Vec<Project>,
     ) -> Self {
         let mut list_state = ListState::default();
         if !time_entries.is_empty() {
             list_state.select(Some(0));
         }
 
+        let projects_map: HashMap<i64, Project> = projects.into_iter().map(|p| (p.id, p)).collect();
+
+        let all_entries = time_entries.clone();
+
         Self {
             time_entries,
             grouped_entries: Vec::new(),
+            all_entries,
             list_state,
             should_quit: false,
             start_date,
@@ -46,6 +58,9 @@ impl App {
             show_grouped: false,
             show_rounded: true,
             round_minutes,
+            projects: projects_map,
+            show_filter_panel: false,
+            active_filter: TimeEntryFilter::new(),
         }
     }
 
@@ -66,26 +81,56 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => {
-                self.should_quit = true;
+        if self.show_filter_panel {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('f') => {
+                    self.show_filter_panel = false;
+                }
+                KeyCode::Char('b') => {
+                    self.toggle_billable_filter();
+                }
+                KeyCode::Char('c') => {
+                    self.clear_filters();
+                }
+                _ => {}
             }
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.should_quit = true;
+        } else {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => {
+                    self.should_quit = true;
+                }
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.should_quit = true;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.next_item();
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.previous_item();
+                }
+                KeyCode::PageDown => {
+                    self.page_down();
+                }
+                KeyCode::PageUp => {
+                    self.page_up();
+                }
+                KeyCode::Home => {
+                    self.goto_first();
+                }
+                KeyCode::End => {
+                    self.goto_last();
+                }
+                KeyCode::Char('g') => {
+                    self.toggle_grouping();
+                }
+                KeyCode::Char('r') => {
+                    self.toggle_rounding();
+                }
+                KeyCode::Char('f') => {
+                    self.toggle_filter_panel();
+                }
+                _ => {}
             }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.next_item();
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.previous_item();
-            }
-            KeyCode::Char('g') => {
-                self.toggle_grouping();
-            }
-            KeyCode::Char('r') => {
-                self.toggle_rounding();
-            }
-            _ => {}
         }
     }
 
@@ -146,19 +191,131 @@ impl App {
         self.show_rounded = !self.show_rounded;
     }
 
-    fn ui(&mut self, f: &mut Frame) {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(0),
-                Constraint::Length(3),
-            ])
-            .split(f.area());
+    fn toggle_filter_panel(&mut self) {
+        self.show_filter_panel = !self.show_filter_panel;
+    }
 
-        self.render_header(f, chunks[0]);
-        self.render_list(f, chunks[1]);
-        self.render_footer(f, chunks[2]);
+    fn toggle_billable_filter(&mut self) {
+        self.active_filter = if self.active_filter.billable_only {
+            TimeEntryFilter::new()
+        } else {
+            TimeEntryFilter::new().with_billable_only()
+        };
+        self.apply_filters();
+    }
+
+    fn clear_filters(&mut self) {
+        self.active_filter = TimeEntryFilter::new();
+        self.apply_filters();
+    }
+
+    fn apply_filters(&mut self) {
+        let projects_vec: Vec<_> = self.projects.values().cloned().collect();
+        self.time_entries = self
+            .active_filter
+            .apply(self.all_entries.clone(), &projects_vec);
+        self.list_state.select(if self.time_entries.is_empty() {
+            None
+        } else {
+            Some(0)
+        });
+    }
+
+    fn page_down(&mut self) {
+        let len = if self.show_grouped {
+            self.grouped_entries.len()
+        } else {
+            self.time_entries.len()
+        };
+
+        if len == 0 {
+            return;
+        }
+
+        let page_size = 10;
+        let i = match self.list_state.selected() {
+            Some(i) => {
+                let new_pos = i + page_size;
+                if new_pos >= len { len - 1 } else { new_pos }
+            }
+            None => 0,
+        };
+        self.list_state.select(Some(i));
+    }
+
+    fn page_up(&mut self) {
+        let len = if self.show_grouped {
+            self.grouped_entries.len()
+        } else {
+            self.time_entries.len()
+        };
+
+        if len == 0 {
+            return;
+        }
+
+        let page_size = 10;
+        let i = match self.list_state.selected() {
+            Some(i) => i.saturating_sub(page_size),
+            None => 0,
+        };
+        self.list_state.select(Some(i));
+    }
+
+    fn goto_first(&mut self) {
+        let len = if self.show_grouped {
+            self.grouped_entries.len()
+        } else {
+            self.time_entries.len()
+        };
+
+        if len > 0 {
+            self.list_state.select(Some(0));
+        }
+    }
+
+    fn goto_last(&mut self) {
+        let len = if self.show_grouped {
+            self.grouped_entries.len()
+        } else {
+            self.time_entries.len()
+        };
+
+        if len > 0 {
+            self.list_state.select(Some(len - 1));
+        }
+    }
+
+    fn ui(&mut self, f: &mut Frame) {
+        if self.show_filter_panel {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Min(0),
+                    Constraint::Length(8),
+                    Constraint::Length(4),
+                ])
+                .split(f.area());
+
+            self.render_header(f, chunks[0]);
+            self.render_list(f, chunks[1]);
+            self.render_filter_panel(f, chunks[2]);
+            self.render_footer(f, chunks[3]);
+        } else {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Min(0),
+                    Constraint::Length(4),
+                ])
+                .split(f.area());
+
+            self.render_header(f, chunks[0]);
+            self.render_list(f, chunks[1]);
+            self.render_footer(f, chunks[2]);
+        }
     }
 
     fn render_header(&self, f: &mut Frame, area: Rect) {
@@ -173,6 +330,20 @@ impl App {
             .block(Block::default().borders(Borders::ALL));
 
         f.render_widget(header, area);
+    }
+
+    fn parse_color(hex: &str) -> Color {
+        let hex = hex.trim_start_matches('#');
+        if hex.len() == 6
+            && let (Ok(r), Ok(g), Ok(b)) = (
+                u8::from_str_radix(&hex[0..2], 16),
+                u8::from_str_radix(&hex[2..4], 16),
+                u8::from_str_radix(&hex[4..6], 16),
+            )
+        {
+            return Color::Rgb(r, g, b);
+        }
+        Color::White
     }
 
     fn render_list(&mut self, f: &mut Frame, area: Rect) {
@@ -190,7 +361,7 @@ impl App {
                         entry.total_hours()
                     };
 
-                    let content = Line::from(vec![
+                    let mut spans = vec![
                         Span::styled(
                             format!("{:.2}h", hours),
                             Style::default()
@@ -198,13 +369,25 @@ impl App {
                                 .add_modifier(Modifier::BOLD),
                         ),
                         Span::raw(" - "),
-                        Span::raw(desc),
-                        Span::styled(
-                            format!(" ({} entries)", entry.entries.len()),
-                            Style::default().fg(Color::DarkGray),
-                        ),
-                    ]);
+                    ];
 
+                    if let Some(project_id) = entry.project_id
+                        && let Some(project) = self.projects.get(&project_id)
+                    {
+                        let color = Self::parse_color(&project.color);
+                        spans.push(Span::styled(
+                            format!("[{}] ", project.name),
+                            Style::default().fg(color).add_modifier(Modifier::BOLD),
+                        ));
+                    }
+
+                    spans.push(Span::raw(desc));
+                    spans.push(Span::styled(
+                        format!(" ({} entries)", entry.entries.len()),
+                        Style::default().fg(Color::DarkGray),
+                    ));
+
+                    let content = Line::from(spans);
                     ListItem::new(content)
                 })
                 .collect()
@@ -220,13 +403,15 @@ impl App {
                     let duration_hours = if self.show_rounded && self.round_minutes.is_some() {
                         let round_to_minutes = self.round_minutes.unwrap();
                         let seconds_per_round = round_to_minutes * 60;
-                        let rounded_duration = ((entry.duration as f64 / seconds_per_round as f64).ceil() as i64) * seconds_per_round;
+                        let rounded_duration = ((entry.duration as f64 / seconds_per_round as f64)
+                            .ceil() as i64)
+                            * seconds_per_round;
                         rounded_duration as f64 / 3600.0
                     } else {
                         entry.duration as f64 / 3600.0
                     };
 
-                    let content = Line::from(vec![
+                    let mut spans = vec![
                         Span::styled(
                             entry.start.format("%Y-%m-%d %H:%M").to_string(),
                             Style::default().fg(Color::Yellow),
@@ -237,9 +422,21 @@ impl App {
                             Style::default().fg(Color::Green),
                         ),
                         Span::raw(" - "),
-                        Span::raw(desc),
-                    ]);
+                    ];
 
+                    if let Some(project_id) = entry.project_id
+                        && let Some(project) = self.projects.get(&project_id)
+                    {
+                        let color = Self::parse_color(&project.color);
+                        spans.push(Span::styled(
+                            format!("[{}] ", project.name),
+                            Style::default().fg(color).add_modifier(Modifier::BOLD),
+                        ));
+                    }
+
+                    spans.push(Span::raw(desc));
+
+                    let content = Line::from(spans);
                     ListItem::new(content)
                 })
                 .collect()
@@ -263,18 +460,106 @@ impl App {
         f.render_stateful_widget(list, area, &mut self.list_state);
     }
 
+    fn render_filter_panel(&self, f: &mut Frame, area: Rect) {
+        let billable_status = if self.active_filter.billable_only {
+            "ACTIVE"
+        } else {
+            "OFF"
+        };
+
+        let filter_lines = vec![
+            Line::from(vec![Span::styled(
+                "Active Filters:",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("  Billable Only: ", Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    billable_status,
+                    if self.active_filter.billable_only {
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::DarkGray)
+                    },
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "Filter Controls:",
+                Style::default().fg(Color::Yellow),
+            )]),
+            Line::from(vec![Span::raw(
+                "  b: Toggle Billable Only  │  c: Clear All Filters  │  f/Esc: Close Panel",
+            )]),
+        ];
+
+        let panel = Paragraph::new(filter_lines)
+            .style(Style::default().fg(Color::Gray))
+            .block(Block::default().borders(Borders::ALL).title("Filters"));
+
+        f.render_widget(panel, area);
+    }
+
     fn render_footer(&self, f: &mut Frame, area: Rect) {
         let grouping_status = if self.show_grouped { "ON" } else { "OFF" };
         let rounding_status = if self.show_rounded { "ON" } else { "OFF" };
+        let filter_indicator = if self.active_filter.billable_only {
+            " [FILTERED]"
+        } else {
+            ""
+        };
 
-        let footer_text = format!(
-            "q: Quit | ↑↓/jk: Navigate | g: Grouping ({}) | r: Rounding ({})",
-            grouping_status, rounding_status
-        );
+        let len = if self.show_grouped {
+            self.grouped_entries.len()
+        } else {
+            self.time_entries.len()
+        };
 
-        let footer = Paragraph::new(footer_text)
+        let selected_pos = self.list_state.selected().map(|i| i + 1).unwrap_or(0);
+
+        let footer_lines = vec![
+            Line::from(vec![
+                Span::styled("Navigation: ", Style::default().fg(Color::Yellow)),
+                Span::raw("↑↓/jk "),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::raw("PgUp/PgDn "),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::raw("Home/End "),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Toggles: ", Style::default().fg(Color::Yellow)),
+                Span::raw(format!("g:Group({}) ", grouping_status)),
+                Span::raw(format!("r:Round({}) ", rounding_status)),
+                Span::raw("f:Filter "),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::raw("q/Esc:Quit"),
+            ]),
+            Line::from(vec![
+                Span::styled("Status: ", Style::default().fg(Color::Cyan)),
+                Span::raw(format!("Entry {}/{}", selected_pos, len)),
+                Span::styled(
+                    filter_indicator,
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" "),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Date Range: ", Style::default().fg(Color::Cyan)),
+                Span::raw(format!(
+                    "{} to {}",
+                    self.start_date.format("%Y-%m-%d"),
+                    self.end_date.format("%Y-%m-%d")
+                )),
+            ]),
+        ];
+
+        let footer = Paragraph::new(footer_lines)
             .style(Style::default().fg(Color::Gray))
-            .block(Block::default().borders(Borders::ALL));
+            .block(Block::default().borders(Borders::ALL).title("Help"));
 
         f.render_widget(footer, area);
     }
