@@ -116,13 +116,21 @@ The `App` struct (src/ui/app.rs) maintains UI state:
 - `time_entries: Vec<TimeEntry>` - Raw entries from DB
 - `grouped_entries: Vec<GroupedTimeEntry>` - Grouped view (computed in main.rs)
 - `list_state: ListState` - Ratatui list selection state
-- `show_grouped: bool` - Toggle between views
+- `show_grouped: bool` - Toggle between grouped/individual views (default: false)
+- `show_rounded: bool` - Toggle rounding on/off (default: true)
+- `round_minutes: Option<i64>` - Rounding interval from config
+
+**Rounding behavior**:
+- **Grouped view**: Rounding is applied when `show_rounded` is true and `round_minutes` is configured
+- **Non-grouped view**: Always shows real times (no rounding regardless of toggle)
+- User can press 'r' to toggle rounding on/off in real-time
+- Default is rounding ON for grouped view
 
 **Event loop**:
 1. Render UI (`ui()` method)
 2. Wait for keyboard event (`crossterm::event::read()`)
 3. Handle event (`handle_key_event()`)
-4. Update state (e.g., `next_item()`, `toggle_grouping()`)
+4. Update state (e.g., `next_item()`, `toggle_grouping()`, `toggle_rounding()`)
 5. Check `should_quit` flag
 
 #### 4. **Configuration Management**

@@ -107,6 +107,7 @@ toggl-timeguru tui --start 2025-01-01 --end 2025-01-31
 - `↑`/`k` - Move up
 - `↓`/`j` - Move down
 - `g` - Toggle grouping on/off
+- `r` - Toggle rounding on/off (default: ON in grouped view)
 - `q`/`Esc` - Quit
 
 ### Global Options

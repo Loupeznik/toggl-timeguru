@@ -20,6 +20,7 @@ pub struct App {
     pub start_date: DateTime<Utc>,
     pub end_date: DateTime<Utc>,
     pub show_grouped: bool,
+    pub show_rounded: bool,
     pub round_minutes: Option<i64>,
 }
 
@@ -43,6 +44,7 @@ impl App {
             start_date,
             end_date,
             show_grouped: false,
+            show_rounded: true,
             round_minutes,
         }
     }
@@ -79,6 +81,9 @@ impl App {
             }
             KeyCode::Char('g') => {
                 self.toggle_grouping();
+            }
+            KeyCode::Char('r') => {
+                self.toggle_rounding();
             }
             _ => {}
         }
@@ -137,6 +142,10 @@ impl App {
         self.list_state.select(Some(0));
     }
 
+    fn toggle_rounding(&mut self) {
+        self.show_rounded = !self.show_rounded;
+    }
+
     fn ui(&mut self, f: &mut Frame) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -175,8 +184,8 @@ impl App {
                         .description
                         .clone()
                         .unwrap_or_else(|| "(No description)".to_string());
-                    let hours = if let Some(round_min) = self.round_minutes {
-                        entry.rounded_hours(round_min)
+                    let hours = if self.show_rounded && self.round_minutes.is_some() {
+                        entry.rounded_hours(self.round_minutes.unwrap())
                     } else {
                         entry.total_hours()
                     };
@@ -247,11 +256,13 @@ impl App {
     }
 
     fn render_footer(&self, f: &mut Frame, area: Rect) {
-        let footer_text = if self.show_grouped {
-            "q: Quit | ↑↓/jk: Navigate | g: Toggle grouping (OFF)"
-        } else {
-            "q: Quit | ↑↓/jk: Navigate | g: Toggle grouping (ON)"
-        };
+        let grouping_status = if self.show_grouped { "ON" } else { "OFF" };
+        let rounding_status = if self.show_rounded { "ON" } else { "OFF" };
+
+        let footer_text = format!(
+            "q: Quit | ↑↓/jk: Navigate | g: Grouping ({}) | r: Rounding ({})",
+            grouping_status, rounding_status
+        );
 
         let footer = Paragraph::new(footer_text)
             .style(Style::default().fg(Color::Gray))
