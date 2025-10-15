@@ -216,7 +216,15 @@ impl App {
                         .description
                         .clone()
                         .unwrap_or_else(|| "(No description)".to_string());
-                    let duration_hours = entry.duration as f64 / 3600.0;
+
+                    let duration_hours = if self.show_rounded && self.round_minutes.is_some() {
+                        let round_to_minutes = self.round_minutes.unwrap();
+                        let seconds_per_round = round_to_minutes * 60;
+                        let rounded_duration = ((entry.duration as f64 / seconds_per_round as f64).ceil() as i64) * seconds_per_round;
+                        rounded_duration as f64 / 3600.0
+                    } else {
+                        entry.duration as f64 / 3600.0
+                    };
 
                     let content = Line::from(vec![
                         Span::styled(
