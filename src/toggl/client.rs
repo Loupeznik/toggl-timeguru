@@ -74,8 +74,8 @@ impl TogglClient {
         let url = format!(
             "{}/me/time_entries?start_date={}&end_date={}",
             self.base_url,
-            start_date.to_rfc3339(),
-            end_date.to_rfc3339()
+            start_date.format("%Y-%m-%d"),
+            end_date.format("%Y-%m-%d")
         );
 
         let response = self
