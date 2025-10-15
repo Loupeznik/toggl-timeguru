@@ -67,6 +67,15 @@ This document tracks the development progress across all phases of the Toggl Tim
 
 ## Phase 2: Enhanced Functionality
 
+### CI/CD & Build Automation (Priority)
+- [ ] Set up GitHub Actions workflow
+- [ ] Configure multi-platform builds (Linux/macOS/Windows × amd64/arm64)
+- [ ] Add automated testing on push/PR
+- [ ] Implement automated GitHub Releases with binaries
+- [ ] Add binary stripping and compression for smaller downloads
+- [ ] Set up clippy and rustfmt checks in CI
+- [ ] Add code coverage reporting
+
 ### Advanced Filtering
 - [ ] Add project-based filtering
 - [ ] Implement tag-based filtering
@@ -170,15 +179,6 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [ ] Add Homebrew formula
 - [ ] Create Debian package (.deb)
 - [ ] Publish to crates.io
-- [ ] Set up GitHub Releases with binaries
-
-### CI/CD
-- [ ] Set up GitHub Actions workflow
-- [ ] Add automated testing on push
-- [ ] Configure cross-platform builds
-- [ ] Implement automated releases
-- [ ] Add code coverage reporting
-- [ ] Set up linting (clippy)
 
 ### Dockerization
 - [ ] Create Dockerfile
