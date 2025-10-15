@@ -1,4 +1,4 @@
-use chrono::{DateTime, Local, TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -81,15 +81,11 @@ impl Cli {
             return Ok(dt.with_timezone(&Utc));
         }
 
-        if let Ok(naive) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-            let local = naive
+        if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+            let naive_datetime = naive_date
                 .and_hms_opt(0, 0, 0)
                 .ok_or_else(|| anyhow::anyhow!("Invalid time"))?;
-            return Ok(Local
-                .from_local_datetime(&local)
-                .single()
-                .ok_or_else(|| anyhow::anyhow!("Invalid datetime"))?
-                .with_timezone(&Utc));
+            return Ok(Utc.from_utc_datetime(&naive_datetime));
         }
 
         anyhow::bail!("Invalid date format. Use ISO 8601 (YYYY-MM-DDTHH:MM:SSZ) or YYYY-MM-DD")
