@@ -35,12 +35,26 @@
 - [x] Add retry logic for API failures (exponential backoff, 3 retries)
 - [x] Implement rate limiting handling (429 status code)
 
-## v1.1.1 - CSV Export & CI/CD (PLANNED)
+## v1.1.0 - Bugfixes & Quick Wins ✅ COMPLETED
+### Bugfixes
+- [x] Fix Windows TUI navigation bug where k/j keys skip two rows instead of one
+
+### Quick Win Features
+- [x] Add clipboard copy functionality for time entry descriptions (hotkey 'y')
+
+## v1.1.1 - Project Assignment & CSV Export (PLANNED)
+### Project Assignment Feature
+- [ ] Implement TUI project selector panel
+- [ ] Add project assignment for individual time entries (hotkey 'p')
+- [ ] Add batch project assignment for grouped entries
+- [x] API support: update_time_entry_project() method added
+
 ### Data Export
 - [ ] Implement CSV export using csv crate
 - [ ] Add customizable CSV format options
 - [ ] Include metadata in exports (date range, filters)
 
+## v1.1.2 - CI/CD & Build Automation (PLANNED)
 ### CI/CD & Build Automation
 - [ ] Set up GitHub Actions workflow
 - [ ] Configure multi-platform builds (Linux/macOS/Windows × amd64/arm64)

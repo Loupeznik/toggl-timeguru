@@ -1,6 +1,7 @@
 use anyhow::Result;
+use arboard::Clipboard;
 use chrono::{DateTime, Utc};
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     Frame, Terminal,
     backend::Backend,
@@ -28,6 +29,7 @@ pub struct App {
     pub projects: HashMap<i64, Project>,
     pub show_filter_panel: bool,
     pub active_filter: TimeEntryFilter,
+    pub clipboard_message: Option<String>,
 }
 
 impl App {
@@ -61,6 +63,7 @@ impl App {
             projects: projects_map,
             show_filter_panel: false,
             active_filter: TimeEntryFilter::new(),
+            clipboard_message: None,
         }
     }
 
@@ -68,7 +71,9 @@ impl App {
         loop {
             terminal.draw(|f| self.ui(f))?;
 
-            if let Event::Key(key) = event::read()? {
+            if let Event::Key(key) = event::read()?
+                && key.kind == KeyEventKind::Press
+            {
                 self.handle_key_event(key);
             }
 
@@ -128,6 +133,9 @@ impl App {
                 }
                 KeyCode::Char('f') => {
                     self.toggle_filter_panel();
+                }
+                KeyCode::Char('y') => {
+                    self.copy_to_clipboard();
                 }
                 _ => {}
             }
@@ -283,6 +291,39 @@ impl App {
 
         if len > 0 {
             self.list_state.select(Some(len - 1));
+        }
+    }
+
+    fn copy_to_clipboard(&mut self) {
+        let description = if self.show_grouped {
+            self.list_state.selected().and_then(|i| {
+                self.grouped_entries
+                    .get(i)
+                    .and_then(|entry| entry.description.clone())
+            })
+        } else {
+            self.list_state.selected().and_then(|i| {
+                self.time_entries
+                    .get(i)
+                    .and_then(|entry| entry.description.clone())
+            })
+        };
+
+        if let Some(desc) = description {
+            match Clipboard::new() {
+                Ok(mut clipboard) => {
+                    if clipboard.set_text(&desc).is_ok() {
+                        self.clipboard_message = Some(format!("Copied: {}", desc));
+                    } else {
+                        self.clipboard_message = Some("Failed to copy to clipboard".to_string());
+                    }
+                }
+                Err(_) => {
+                    self.clipboard_message = Some("Clipboard unavailable".to_string());
+                }
+            }
+        } else {
+            self.clipboard_message = Some("No description to copy".to_string());
         }
     }
 
@@ -521,7 +562,7 @@ impl App {
 
         let selected_pos = self.list_state.selected().map(|i| i + 1).unwrap_or(0);
 
-        let footer_lines = vec![
+        let mut footer_lines = vec![
             Line::from(vec![
                 Span::styled("Navigation: ", Style::default().fg(Color::Yellow)),
                 Span::raw("↑↓/jk "),
@@ -534,6 +575,8 @@ impl App {
                 Span::raw(format!("g:Group({}) ", grouping_status)),
                 Span::raw(format!("r:Round({}) ", rounding_status)),
                 Span::raw("f:Filter "),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::raw("y:Copy "),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
                 Span::raw("q/Esc:Quit"),
             ]),
@@ -556,6 +599,18 @@ impl App {
                 )),
             ]),
         ];
+
+        if let Some(ref msg) = self.clipboard_message {
+            footer_lines.push(Line::from(vec![
+                Span::styled("Clipboard: ", Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    msg,
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        }
 
         let footer = Paragraph::new(footer_lines)
             .style(Style::default().fg(Color::Gray))

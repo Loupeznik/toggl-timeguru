@@ -67,6 +67,16 @@ This document tracks the development progress across all phases of the Toggl Tim
 
 ## Phase 2: Enhanced Functionality
 
+### v1.1.0 Bugfixes & Quick Wins ✅ COMPLETED
+- [x] Fix Windows TUI navigation bug where k/j keys skip two rows instead of one (filter KeyEventKind::Press)
+- [x] Add clipboard copy functionality for time entry descriptions (hotkey 'y' using arboard crate)
+
+### v1.1.1 Project Assignment (PLANNED)
+- [ ] Implement TUI project selector panel
+- [ ] Add project assignment for individual time entries (hotkey 'p')
+- [ ] Add batch project assignment for grouped entries
+- [x] API support: update_time_entry_project() method added to TogglClient
+
 ### CI/CD & Build Automation (Priority)
 - [ ] Set up GitHub Actions workflow
 - [ ] Configure multi-platform builds (Linux/macOS/Windows × amd64/arm64)
@@ -76,11 +86,11 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [ ] Set up clippy and rustfmt checks in CI
 - [ ] Add code coverage reporting
 
-### Advanced Filtering
-- [ ] Add project-based filtering
-- [ ] Implement tag-based filtering
-- [ ] Add client-based filtering
-- [ ] Create filter combination logic
+### Advanced Filtering ✅ COMPLETED (v1.1.0)
+- [x] Add project-based filtering
+- [x] Implement tag-based filtering
+- [x] Add client-based filtering
+- [x] Create filter combination logic
 
 ### Report Generation
 - [ ] Implement daily summary report
@@ -94,17 +104,17 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [ ] Add customizable CSV format options
 - [ ] Include metadata in exports (date range, filters)
 
-### Enhanced UI
-- [ ] Improve navigation (page up/down, home/end)
-- [ ] Add filter UI panel
+### Enhanced UI ✅ PARTIALLY COMPLETED (v1.1.0)
+- [x] Improve navigation (page up/down, home/end)
+- [x] Add filter UI panel
 - [ ] Create report selection interface
-- [ ] Implement status bar with help hints
+- [x] Implement status bar with help hints
 - [ ] Add loading indicators for API calls
 
-### Local Caching
-- [ ] Implement sync mechanism for time entries
-- [ ] Add last sync timestamp tracking
-- [ ] Create offline mode support
+### Local Caching ✅ PARTIALLY COMPLETED (v1.1.0)
+- [x] Implement sync mechanism for time entries
+- [x] Add last sync timestamp tracking
+- [x] Create offline mode support
 - [ ] Implement incremental sync (only fetch new entries)
 - [ ] Add cache invalidation logic
 
@@ -114,18 +124,18 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [ ] Add similarity threshold configuration
 - [ ] Create preview for fuzzy matches before grouping
 
-### Testing & Error Handling
-- [ ] Expand unit test coverage
+### Testing & Error Handling ✅ PARTIALLY COMPLETED (v1.1.0)
+- [x] Expand unit test coverage
 - [ ] Add integration tests with mocked API
-- [ ] Improve error messages with context
-- [ ] Add retry logic for API failures
-- [ ] Implement rate limiting handling
+- [x] Improve error messages with context
+- [x] Add retry logic for API failures
+- [x] Implement rate limiting handling
 
-### Logging
-- [ ] Add detailed debug logging
-- [ ] Configure log levels via environment variable
-- [ ] Log API requests/responses in debug mode
-- [ ] Add performance metrics logging
+### Logging ✅ COMPLETED (v1.1.0)
+- [x] Add detailed debug logging
+- [x] Configure log levels via environment variable
+- [x] Log API requests/responses in debug mode
+- [x] Add performance metrics logging
 
 ## Phase 3: Additional Features
 

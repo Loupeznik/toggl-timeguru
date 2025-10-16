@@ -233,6 +233,9 @@ This is a candidate for Phase 2 or Phase 3 depending on user needs.
 5. Run `cargo build` to compile
 6. Test manually with `cargo run -- [command]`
 7. Commit changes (commits should be concise, present tense, imperative mood)
+8. **IMPORTANT**: When completing features, update progress tracking in BOTH:
+   - `docs/PROGRESS.md` - Mark tasks as completed with [x]
+   - `docs/VERSION_TIMELINE.md` - Mark version sections as completed with checkmarks
 
 ## Phase Development
 

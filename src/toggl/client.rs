@@ -224,6 +224,75 @@ impl TogglClient {
             }
         }
     }
+
+    #[allow(dead_code)]
+    pub async fn update_time_entry_project(
+        &self,
+        workspace_id: i64,
+        entry_id: i64,
+        project_id: Option<i64>,
+    ) -> Result<TimeEntry> {
+        let url = format!(
+            "{}/workspaces/{}/time_entries/{}",
+            self.base_url, workspace_id, entry_id
+        );
+
+        let mut body = serde_json::Map::new();
+        if let Some(pid) = project_id {
+            body.insert(
+                "project_id".to_string(),
+                serde_json::Value::Number(pid.into()),
+            );
+        } else {
+            body.insert("project_id".to_string(), serde_json::Value::Null);
+        }
+
+        debug!(
+            "Updating time entry {} with project_id: {:?}",
+            entry_id, project_id
+        );
+
+        let response = self
+            .client
+            .put(&url)
+            .header(header::AUTHORIZATION, self.auth_header())
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to update time entry")?;
+
+        match response.status() {
+            StatusCode::OK => {
+                let updated_entry = response
+                    .json::<TimeEntry>()
+                    .await
+                    .context("Failed to parse updated time entry")?;
+                info!(
+                    "Successfully updated time entry {} project_id to {:?}",
+                    entry_id, project_id
+                );
+                Ok(updated_entry)
+            }
+            StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => {
+                error!("Authentication failed while updating time entry");
+                Err(anyhow::anyhow!(
+                    "Authentication failed. Please check your API token."
+                ))
+            }
+            status => {
+                let error_text = response.text().await.unwrap_or_default();
+                error!(
+                    "Failed to update time entry - Status: {}, Error: {}",
+                    status, error_text
+                );
+                Err(anyhow::anyhow!(
+                    "Failed to update time entry. Status: {}, Error: {}",
+                    status,
+                    error_text
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
