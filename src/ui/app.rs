@@ -111,7 +111,14 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) {
-        if self.show_filter_panel {
+        if self.show_project_selector {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('p') => {
+                    self.show_project_selector = false;
+                }
+                _ => {}
+            }
+        } else if self.show_filter_panel {
             match key.code {
                 KeyCode::Esc | KeyCode::Char('f') => {
                     self.show_filter_panel = false;
@@ -167,6 +174,9 @@ impl App {
                 }
                 KeyCode::Char('y') => {
                     self.copy_to_clipboard();
+                }
+                KeyCode::Char('p') => {
+                    self.toggle_project_selector();
                 }
                 _ => {}
             }
@@ -268,6 +278,10 @@ impl App {
 
     fn toggle_filter_panel(&mut self) {
         self.show_filter_panel = !self.show_filter_panel;
+    }
+
+    fn toggle_project_selector(&mut self) {
+        self.show_project_selector = !self.show_project_selector;
     }
 
     fn toggle_billable_filter(&mut self) {
@@ -639,31 +653,65 @@ impl App {
         f.render_widget(panel, area);
     }
 
-    fn render_project_selector_panel(&self, f: &mut Frame, area: Rect) {
-        let panel_lines = vec![
-            Line::from(vec![Span::styled(
-                "Select Project (Placeholder)",
+    fn render_project_selector_panel(&mut self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(3)])
+            .split(area);
+
+        let project_items: Vec<ListItem> = self
+            .filtered_projects
+            .iter()
+            .map(|project| {
+                let color = Self::parse_color(&project.color);
+                let spans = vec![
+                    Span::styled(
+                        format!("[{}]", project.name),
+                        Style::default().fg(color).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(" "),
+                    Span::styled(
+                        if project.active {
+                            "Active"
+                        } else {
+                            "Archived"
+                        },
+                        if project.active {
+                            Style::default().fg(Color::Green)
+                        } else {
+                            Style::default().fg(Color::DarkGray)
+                        },
+                    ),
+                ];
+                ListItem::new(Line::from(spans))
+            })
+            .collect();
+
+        let project_list = List::new(project_items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Select Project to Assign"),
+            )
+            .highlight_style(
                 Style::default()
-                    .fg(Color::Yellow)
+                    .bg(Color::DarkGray)
                     .add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(""),
-            Line::from(vec![Span::raw("Project list will appear here...")]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Controls:",
-                Style::default().fg(Color::Yellow),
-            )]),
-            Line::from(vec![Span::raw(
-                "  ↑↓/jk: Navigate  │  Enter: Select  │  Esc: Cancel",
-            )]),
-        ];
+            )
+            .highlight_symbol(">> ");
 
-        let panel = Paragraph::new(panel_lines)
+        f.render_stateful_widget(project_list, chunks[0], &mut self.project_selector_state);
+
+        let help_text = Line::from(vec![
+            Span::styled("Controls: ", Style::default().fg(Color::Yellow)),
+            Span::raw("↑↓/jk: Navigate  │  Enter: Select  │  p/Esc: Cancel"),
+        ]);
+
+        let help_para = Paragraph::new(help_text)
             .style(Style::default().fg(Color::Gray))
-            .block(Block::default().borders(Borders::ALL).title("Assign Project"));
+            .block(Block::default().borders(Borders::ALL));
 
-        f.render_widget(panel, area);
+        f.render_widget(help_para, chunks[1]);
     }
 
     fn render_footer(&self, f: &mut Frame, area: Rect) {
