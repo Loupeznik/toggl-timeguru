@@ -50,32 +50,33 @@
 ### Quick Win Features
 - [x] Add clipboard copy functionality for time entry descriptions (hotkey 'y')
 
-## v1.1.1 - Project Assignment & Data Management (IN PROGRESS)
+## v1.1.1 - Project Assignment & Data Management ✅ COMPLETED
 ### Project Assignment Feature ✅ COMPLETED
 - [x] Implement TUI project selector panel
 - [x] Add project assignment for individual time entries (hotkey 'p')
 - [x] Add project search functionality (hotkey '/')
 - [x] Add navigation shortcuts (j/k, PageUp/PageDown, Home/End)
-- [x] Batch assignment note: Shows message to toggle to individual view
+- [x] Batch assignment support for grouped entries
 - [x] API support: update_time_entry_project() method added
-- [x] Async/sync integration: Using Arc<TogglClient> with Handle::block_on()
+- [x] Async/sync integration: Using Arc<TogglClient> with Handle::spawn()
 
-### Data Management & Multi-Account Support (PLANNED)
-- [ ] Add CLI command for data deletion (`toggl-timeguru clean`)
-  - [ ] `clean --all` - Delete database + config
-  - [ ] `clean --data` - Delete only database
-  - [ ] `clean --config` - Delete only config
-  - [ ] `clean --confirm` - Skip confirmation prompt
-- [ ] Implement multi-account support
-  - [ ] Store user_id with database entries
-  - [ ] Add account switching mechanism
-  - [ ] Separate databases per account OR add account filtering
-  - [ ] Visual indicator in TUI showing current account
+### Data Management & Multi-Account Support ✅ COMPLETED
+- [x] Add CLI command for data deletion (`toggl-timeguru clean`)
+  - [x] `clean --all` - Delete database + config
+  - [x] `clean --data` - Delete only database
+  - [x] `clean --config` - Delete only config
+  - [x] `clean --confirm` - Skip confirmation prompt
+- [x] Implement multi-account support
+  - [x] Store user_id with database entries
+  - [x] Add user_id index for better query performance
+  - [x] Filter database queries by user_id
+  - [x] Visual indicator in TUI showing current account
+  - [x] Auto-detect account switching with warnings
 
-### Data Export (PLANNED)
-- [ ] Implement CSV export using csv crate
-- [ ] Add customizable CSV format options
-- [ ] Include metadata in exports (date range, filters)
+### Data Export ✅ COMPLETED
+- [x] Implement CSV export using csv crate
+- [x] Add customizable CSV format options (grouped vs individual)
+- [x] Include metadata in exports (date range, user_id, entry count)
 
 ## v1.1.2 - CI/CD & Build Automation (PLANNED)
 ### CI/CD & Build Automation

@@ -80,26 +80,32 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [x] Add project assignment for individual time entries (hotkey 'p')
 - [x] Add project search functionality (hotkey '/' in selector)
 - [x] Add navigation shortcuts (j/k, PageUp/PageDown, Home/End)
-- [x] Batch assignment: Shows message to toggle to individual view
+- [x] Batch assignment support for grouped entries
 - [x] API support: update_time_entry_project() method added to TogglClient
-- [x] Async/sync integration using Arc<TogglClient> with Handle::block_on()
+- [x] Async/sync integration using Arc<TogglClient> with Handle::spawn()
 - [x] Status messages for success/failure feedback
 
-### v1.1.1 Data Management & Multi-Account Support (PLANNED)
-- [ ] Add CLI command for data deletion (`toggl-timeguru clean`)
-  - [ ] `clean --all` - Delete both database and config
-  - [ ] `clean --data` - Delete only database
-  - [ ] `clean --config` - Delete only configuration
-  - [ ] `clean --confirm` - Skip confirmation prompt for automation
-  - [ ] Cross-platform support (macOS/Linux/Windows)
-- [ ] Implement multi-account support
-  - [ ] Add user_id filtering to database queries
-  - [ ] Create account switching mechanism
-  - [ ] Option 1: Separate databases per account
-  - [ ] Option 2: Single database with account filtering
-  - [ ] Add visual indicator in TUI showing current account
-  - [ ] Prevent data mixing when switching API tokens
+### v1.1.1 Data Management & Multi-Account Support ✅ COMPLETED
+- [x] Add CLI command for data deletion (`toggl-timeguru clean`)
+  - [x] `clean --all` - Delete both database and config
+  - [x] `clean --data` - Delete only database
+  - [x] `clean --config` - Delete only configuration
+  - [x] `clean --confirm` - Skip confirmation prompt for automation
+  - [x] Cross-platform support (macOS/Linux/Windows)
+- [x] Implement multi-account support
+  - [x] Add user_id filtering to database queries
+  - [x] Add user_id index for query performance
+  - [x] Single database with account filtering
+  - [x] Add visual indicator in TUI showing current account
+  - [x] Auto-detect account switching with warnings
 - [x] Document database location and manual deletion procedures
+
+### v1.1.1 CSV Export ✅ COMPLETED
+- [x] Implement CSV export using csv crate
+- [x] Add grouped export format
+- [x] Add individual entry export format
+- [x] Include optional metadata (date range, user_id, entry count)
+- [x] Support project name resolution in exports
 
 ### CI/CD & Build Automation (Priority)
 - [ ] Set up GitHub Actions workflow
