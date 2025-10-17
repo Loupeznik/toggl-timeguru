@@ -12,8 +12,8 @@ use ratatui::{
 };
 
 use crate::processor::TimeEntryFilter;
-use crate::toggl::models::{GroupedTimeEntry, Project, TimeEntry};
 use crate::toggl::TogglClient;
+use crate::toggl::models::{GroupedTimeEntry, Project, TimeEntry};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -44,6 +44,7 @@ pub struct App {
     #[allow(dead_code)]
     pub status_message: Option<String>,
     pub client: Option<Arc<TogglClient>>,
+    pub runtime_handle: Option<tokio::runtime::Handle>,
 }
 
 impl App {
@@ -54,13 +55,15 @@ impl App {
         round_minutes: Option<i64>,
         projects: Vec<Project>,
         client: Option<Arc<TogglClient>>,
+        runtime_handle: Option<tokio::runtime::Handle>,
     ) -> Self {
         let mut list_state = ListState::default();
         if !time_entries.is_empty() {
             list_state.select(Some(0));
         }
 
-        let projects_map: HashMap<i64, Project> = projects.iter().map(|p| (p.id, p.clone())).collect();
+        let projects_map: HashMap<i64, Project> =
+            projects.iter().map(|p| (p.id, p.clone())).collect();
         let mut filtered_projects = projects.clone();
         filtered_projects.sort_by(|a, b| a.name.cmp(&b.name));
 
@@ -94,6 +97,7 @@ impl App {
             filtered_projects,
             status_message: None,
             client,
+            runtime_handle,
         }
     }
 
@@ -497,11 +501,7 @@ impl App {
         let i = match self.project_selector_state.selected() {
             Some(i) => {
                 let new_pos = i + page_size;
-                if new_pos >= len {
-                    len - 1
-                } else {
-                    new_pos
-                }
+                if new_pos >= len { len - 1 } else { new_pos }
             }
             None => 0,
         };
@@ -540,7 +540,10 @@ impl App {
     }
 
     fn filter_projects(&mut self) {
-        let query = self.project_search_query.trim_start_matches('/').to_lowercase();
+        let query = self
+            .project_search_query
+            .trim_start_matches('/')
+            .to_lowercase();
 
         if query.is_empty() {
             self.reset_filtered_projects();
@@ -624,7 +627,13 @@ impl App {
         let entry_id = entry.id;
         let workspace_id = entry.workspace_id;
 
-        let handle = tokio::runtime::Handle::current();
+        let handle = match &self.runtime_handle {
+            Some(h) => h.clone(),
+            None => {
+                self.status_message = Some("Runtime not available".to_string());
+                return;
+            }
+        };
         match handle.block_on(client.update_time_entry_project(
             workspace_id,
             entry_id,
@@ -635,16 +644,11 @@ impl App {
                     entry_mut.project_id = Some(project_id);
                 }
 
-                if let Some(all_entry) = self
-                    .all_entries
-                    .iter_mut()
-                    .find(|e| e.id == entry_id)
-                {
+                if let Some(all_entry) = self.all_entries.iter_mut().find(|e| e.id == entry_id) {
                     all_entry.project_id = Some(project_id);
                 }
 
-                self.status_message =
-                    Some(format!("Assigned project: {}", project_name));
+                self.status_message = Some(format!("Assigned project: {}", project_name));
                 self.show_project_selector = false;
                 self.project_search_query.clear();
                 self.reset_filtered_projects();
@@ -916,11 +920,7 @@ impl App {
                     ),
                     Span::raw(" "),
                     Span::styled(
-                        if project.active {
-                            "Active"
-                        } else {
-                            "Archived"
-                        },
+                        if project.active { "Active" } else { "Archived" },
                         if project.active {
                             Style::default().fg(Color::Green)
                         } else {

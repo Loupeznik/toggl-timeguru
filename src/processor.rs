@@ -51,7 +51,9 @@ pub fn group_by_description_and_day(entries: Vec<TimeEntry>) -> Vec<GroupedTimeE
         .into_iter()
         .map(|key| {
             let (description, project_id, date) = key;
-            let entries = groups.remove(&(description.clone(), project_id, date)).unwrap();
+            let entries = groups
+                .remove(&(description.clone(), project_id, date))
+                .unwrap();
             let total_duration: i64 = entries.iter().map(|e| e.duration).sum();
 
             GroupedTimeEntry {
@@ -428,10 +430,13 @@ mod tests {
         assert!(grouped[2].date.is_some());
         assert!(grouped[3].date.is_some());
 
-        let day2_meeting = grouped.iter().find(|g| {
-            g.date == Some(Utc.with_ymd_and_hms(2025, 1, 21, 0, 0, 0).unwrap())
-                && g.description == Some("Meeting".to_string())
-        }).unwrap();
+        let day2_meeting = grouped
+            .iter()
+            .find(|g| {
+                g.date == Some(Utc.with_ymd_and_hms(2025, 1, 21, 0, 0, 0).unwrap())
+                    && g.description == Some("Meeting".to_string())
+            })
+            .unwrap();
         assert_eq!(day2_meeting.total_duration, 3600);
         assert_eq!(day2_meeting.entries.len(), 2);
     }

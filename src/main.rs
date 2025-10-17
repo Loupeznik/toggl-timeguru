@@ -309,6 +309,8 @@ async fn handle_tui(
         Err(_) => None,
     };
 
+    let runtime_handle = Some(tokio::runtime::Handle::current());
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -322,6 +324,7 @@ async fn handle_tui(
         config.round_duration_minutes,
         projects,
         client,
+        runtime_handle,
     );
     let grouped = group_by_description(app.time_entries.clone());
     app.grouped_entries = grouped;
