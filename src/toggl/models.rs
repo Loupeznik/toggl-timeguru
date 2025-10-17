@@ -51,6 +51,7 @@ pub struct Workspace {
     pub default_hourly_rate: Option<f64>,
     pub default_currency: String,
     pub only_admins_may_create_projects: bool,
+    #[serde(default)]
     pub only_admins_see_billable_rates: bool,
     pub rounding: i32,
     pub rounding_minutes: i32,
@@ -63,6 +64,7 @@ pub struct GroupedTimeEntry {
     pub description: Option<String>,
     #[allow(dead_code)]
     pub project_id: Option<i64>,
+    pub date: Option<DateTime<Utc>>,
     pub entries: Vec<TimeEntry>,
     pub total_duration: i64,
 }
@@ -90,6 +92,7 @@ mod tests {
         GroupedTimeEntry {
             description: Some("Test".to_string()),
             project_id: None,
+            date: None,
             entries: vec![],
             total_duration: duration_seconds,
         }

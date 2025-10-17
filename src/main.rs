@@ -63,16 +63,23 @@ async fn main() -> Result<()> {
 }
 
 fn init_tracing(verbose: bool) {
-    let filter = if verbose {
-        tracing_subscriber::EnvFilter::new("debug")
-    } else {
-        tracing_subscriber::EnvFilter::new("info")
-    };
+    let default_level = if verbose { "debug" } else { "info" };
+
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default_level));
 
     tracing_subscriber::registry()
         .with(filter)
-        .with(tracing_subscriber::fmt::layer())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_target(true)
+                .with_thread_ids(false)
+                .with_file(true)
+                .with_line_number(true),
+        )
         .init();
+
+    tracing::debug!("Tracing initialized with level: {}", default_level);
 }
 
 async fn handle_config(
@@ -247,6 +254,19 @@ async fn handle_sync(
 
     println!("Successfully synced {} time entries", count);
 
+    println!("Syncing projects and workspaces...");
+
+    let workspaces = client.get_workspaces().await?;
+    let mut total_projects = 0;
+
+    for workspace in workspaces {
+        let projects = client.get_projects(workspace.id).await?;
+        let project_count = db.save_projects(&projects)?;
+        total_projects += project_count;
+    }
+
+    println!("Successfully synced {} projects", total_projects);
+
     Ok(())
 }
 
@@ -279,13 +299,21 @@ async fn handle_tui(
         return Ok(());
     }
 
+    let projects = db.get_projects().unwrap_or_default();
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(entries, start_date, end_date, config.round_duration_minutes);
+    let mut app = App::new(
+        entries,
+        start_date,
+        end_date,
+        config.round_duration_minutes,
+        projects,
+    );
     let grouped = group_by_description(app.time_entries.clone());
     app.grouped_entries = grouped;
 

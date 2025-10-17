@@ -1,6 +1,6 @@
 [package]
 name = "toggl-timeguru"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
 authors = ["Dominik Zarsky <dzarsky@dzarsky.eu>"]
 description = "A powerful CLI tool for managing and analyzing Toggl Track time entries"
@@ -23,6 +23,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 base64 = "0.22"
 dirs = "5.0"
+arboard = "3.4"
 
 [dev-dependencies]
 mockito = "1.6"
