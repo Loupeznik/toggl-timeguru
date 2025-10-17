@@ -669,16 +669,21 @@ impl App {
                     entry.workspace_id
                 );
 
-                tracing::debug!("About to call handle.block_on for entry {}", entry.id);
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    handle.block_on(client.update_time_entry_project(
-                        entry.workspace_id,
-                        entry.id,
-                        Some(project_id),
-                    ))
-                }));
+                tracing::debug!("Spawning async task for entry {}", entry.id);
 
-                match result {
+                let (tx, rx) = std::sync::mpsc::channel();
+                let client_clone = client.clone();
+                let workspace_id = entry.workspace_id;
+                let entry_id = entry.id;
+
+                handle.spawn(async move {
+                    let result = client_clone
+                        .update_time_entry_project(workspace_id, entry_id, Some(project_id))
+                        .await;
+                    let _ = tx.send(result);
+                });
+
+                match rx.recv() {
                     Ok(Ok(_)) => {
                         tracing::debug!("Successfully assigned project to entry {}", entry.id);
                         success_count += 1;
@@ -699,16 +704,8 @@ impl App {
                         tracing::error!("API error assigning project to entry {}: {}", entry.id, e);
                         fail_count += 1;
                     }
-                    Err(panic_err) => {
-                        tracing::error!(
-                            "PANIC occurred while assigning project to entry {}",
-                            entry.id
-                        );
-                        if let Some(s) = panic_err.downcast_ref::<&str>() {
-                            tracing::error!("Panic message: {}", s);
-                        } else if let Some(s) = panic_err.downcast_ref::<String>() {
-                            tracing::error!("Panic message: {}", s);
-                        }
+                    Err(e) => {
+                        tracing::error!("Channel error while waiting for API result: {}", e);
                         fail_count += 1;
                     }
                 }
@@ -759,19 +756,19 @@ impl App {
             let entry_id = entry.id;
             let workspace_id = entry.workspace_id;
 
-            tracing::debug!(
-                "About to call handle.block_on for single entry {}",
-                entry_id
-            );
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                handle.block_on(client.update_time_entry_project(
-                    workspace_id,
-                    entry_id,
-                    Some(project_id),
-                ))
-            }));
+            tracing::debug!("Spawning async task for single entry {}", entry_id);
 
-            match result {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let client_clone = client.clone();
+
+            handle.spawn(async move {
+                let result = client_clone
+                    .update_time_entry_project(workspace_id, entry_id, Some(project_id))
+                    .await;
+                let _ = tx.send(result);
+            });
+
+            match rx.recv() {
                 Ok(Ok(_updated_entry)) => {
                     tracing::info!("Successfully assigned project to entry {}", entry_id);
 
@@ -793,15 +790,9 @@ impl App {
                     tracing::error!("API error: {}", e);
                     self.status_message = Some(format!("Failed to assign project: {}", e));
                 }
-                Err(panic_err) => {
-                    tracing::error!("PANIC occurred while assigning project");
-                    if let Some(s) = panic_err.downcast_ref::<&str>() {
-                        tracing::error!("Panic message: {}", s);
-                    } else if let Some(s) = panic_err.downcast_ref::<String>() {
-                        tracing::error!("Panic message: {}", s);
-                    }
-                    self.status_message =
-                        Some("Crashed while assigning project - check logs".to_string());
+                Err(e) => {
+                    tracing::error!("Channel error while waiting for API result: {}", e);
+                    self.status_message = Some("Error communicating with API task".to_string());
                 }
             }
         }
