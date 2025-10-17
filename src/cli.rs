@@ -73,6 +73,39 @@ pub enum Commands {
         #[arg(short, long, help = "End date")]
         end: Option<String>,
     },
+
+    #[command(about = "Delete application data (database and/or config)")]
+    Clean {
+        #[arg(long, help = "Delete all data (database + config)")]
+        all: bool,
+
+        #[arg(long, help = "Delete only the database")]
+        data: bool,
+
+        #[arg(long, help = "Delete only the configuration")]
+        config: bool,
+
+        #[arg(long, help = "Skip confirmation prompt")]
+        confirm: bool,
+    },
+
+    #[command(about = "Export time entries to CSV format")]
+    Export {
+        #[arg(short, long, help = "Start date")]
+        start: Option<String>,
+
+        #[arg(short, long, help = "End date")]
+        end: Option<String>,
+
+        #[arg(short, long, help = "Output file path")]
+        output: String,
+
+        #[arg(long, help = "Include metadata header in export")]
+        include_metadata: bool,
+
+        #[arg(long, help = "Group entries by description")]
+        group: bool,
+    },
 }
 
 impl Cli {

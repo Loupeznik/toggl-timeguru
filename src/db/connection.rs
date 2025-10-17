@@ -74,48 +74,66 @@ impl Database {
         &self,
         start_date: DateTime<Utc>,
         end_date: DateTime<Utc>,
+        user_id: Option<i64>,
     ) -> Result<Vec<TimeEntry>> {
-        let mut stmt = self.conn.prepare(
+        let query = if user_id.is_some() {
+            "SELECT id, workspace_id, project_id, task_id, billable, start, stop, duration,
+                    description, tags, tag_ids, user_id, at
+             FROM time_entries
+             WHERE start >= ?1 AND start <= ?2 AND user_id = ?3
+             ORDER BY start DESC"
+        } else {
             "SELECT id, workspace_id, project_id, task_id, billable, start, stop, duration,
                     description, tags, tag_ids, user_id, at
              FROM time_entries
              WHERE start >= ?1 AND start <= ?2
-             ORDER BY start DESC",
-        )?;
+             ORDER BY start DESC"
+        };
 
-        let entries = stmt.query_map(
-            rusqlite::params![start_date.to_rfc3339(), end_date.to_rfc3339()],
-            |row| {
-                let tags_str: Option<String> = row.get(9)?;
-                let tags = tags_str.and_then(|s| serde_json::from_str(&s).ok());
+        let mut stmt = self.conn.prepare(query)?;
 
-                let tag_ids_str: Option<String> = row.get(10)?;
-                let tag_ids = tag_ids_str.and_then(|s| serde_json::from_str(&s).ok());
+        let row_mapper = |row: &rusqlite::Row| {
+            let tags_str: Option<String> = row.get(9)?;
+            let tags = tags_str.and_then(|s| serde_json::from_str(&s).ok());
 
-                Ok(TimeEntry {
-                    id: row.get(0)?,
-                    workspace_id: row.get(1)?,
-                    project_id: row.get(2)?,
-                    task_id: row.get(3)?,
-                    billable: row.get::<_, i32>(4)? != 0,
-                    start: row.get::<_, String>(5)?.parse().unwrap(),
-                    stop: row
-                        .get::<_, Option<String>>(6)?
-                        .and_then(|s| s.parse().ok()),
-                    duration: row.get(7)?,
-                    description: row.get(8)?,
-                    tags,
-                    tag_ids,
-                    duronly: false,
-                    at: row.get::<_, String>(12)?.parse().unwrap(),
-                    server_deleted_at: None,
-                    user_id: row.get(11)?,
-                    uid: None,
-                    wid: None,
-                    pid: None,
-                })
-            },
-        )?;
+            let tag_ids_str: Option<String> = row.get(10)?;
+            let tag_ids = tag_ids_str.and_then(|s| serde_json::from_str(&s).ok());
+
+            Ok(TimeEntry {
+                id: row.get(0)?,
+                workspace_id: row.get(1)?,
+                project_id: row.get(2)?,
+                task_id: row.get(3)?,
+                billable: row.get::<_, i32>(4)? != 0,
+                start: row.get::<_, String>(5)?.parse().unwrap(),
+                stop: row
+                    .get::<_, Option<String>>(6)?
+                    .and_then(|s| s.parse().ok()),
+                duration: row.get(7)?,
+                description: row.get(8)?,
+                tags,
+                tag_ids,
+                duronly: false,
+                at: row.get::<_, String>(12)?.parse().unwrap(),
+                server_deleted_at: None,
+                user_id: row.get(11)?,
+                uid: None,
+                wid: None,
+                pid: None,
+            })
+        };
+
+        let entries = if let Some(uid) = user_id {
+            stmt.query_map(
+                rusqlite::params![start_date.to_rfc3339(), end_date.to_rfc3339(), uid],
+                row_mapper,
+            )?
+        } else {
+            stmt.query_map(
+                rusqlite::params![start_date.to_rfc3339(), end_date.to_rfc3339()],
+                row_mapper,
+            )?
+        };
 
         entries
             .collect::<Result<Vec<_>, _>>()

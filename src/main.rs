@@ -75,6 +75,21 @@ async fn main() -> Result<()> {
             Commands::Sync { start, end } => handle_sync(start, end, cli.api_token).await?,
 
             Commands::Tui { start, end } => handle_tui(start, end, cli.api_token).await?,
+
+            Commands::Clean {
+                all,
+                data,
+                config,
+                confirm,
+            } => handle_clean(all, data, config, confirm).await?,
+
+            Commands::Export {
+                start,
+                end,
+                output,
+                include_metadata,
+                group,
+            } => handle_export(start, end, output, include_metadata, group).await?,
         }
     } else {
         println!("Toggl TimeGuru - Use --help for usage information");
@@ -200,7 +215,7 @@ async fn handle_list(
     };
 
     let mut entries = if offline {
-        db.get_time_entries(start_date, end_date)?
+        db.get_time_entries(start_date, end_date, config.current_user_id)?
     } else {
         let api_token = get_api_token(cli_api_token, &config)?;
         let client = TogglClient::new(api_token)?;
@@ -272,10 +287,26 @@ async fn handle_sync(
     end: Option<String>,
     cli_api_token: Option<String>,
 ) -> Result<()> {
-    let config = Config::load()?;
+    let mut config = Config::load()?;
     let api_token = get_api_token(cli_api_token, &config)?;
     let client = TogglClient::new(api_token)?;
     let db = Database::new(None)?;
+
+    let user_id = client.get_current_user_id().await?;
+    if config.current_user_id.is_none() {
+        config.current_user_id = Some(user_id);
+        config.save()?;
+        println!("Configured for user_id: {}", user_id);
+    } else if config.current_user_id != Some(user_id) {
+        println!(
+            "Warning: API token belongs to user_id {} but config has user_id {:?}",
+            user_id, config.current_user_id
+        );
+        println!("Switching to new user account. Previous data will not be visible.");
+        println!("Use 'toggl-timeguru clean --data' to remove old data if needed.");
+        config.current_user_id = Some(user_id);
+        config.save()?;
+    }
 
     let end_date = if let Some(end_str) = end {
         Cli::parse_date(&end_str)?
@@ -338,7 +369,7 @@ async fn handle_tui(
     };
 
     let entries = db
-        .get_time_entries(start_date, end_date)
+        .get_time_entries(start_date, end_date, config.current_user_id)
         .context("Failed to load time entries. Try running 'sync' first.")?;
 
     if entries.is_empty() {
@@ -372,6 +403,7 @@ async fn handle_tui(
         projects,
         client,
         runtime_handle,
+        config.current_user_id,
     );
     let grouped = group_by_description(app.time_entries.clone());
     app.grouped_entries = grouped;
@@ -386,6 +418,245 @@ async fn handle_tui(
         println!("Error: {:?}", err);
     }
 
+    Ok(())
+}
+
+async fn handle_clean(all: bool, data: bool, config: bool, confirm: bool) -> Result<()> {
+    use std::io::{self, Write};
+
+    let delete_data = all || data;
+    let delete_config = all || config;
+
+    if !delete_data && !delete_config {
+        println!("Please specify what to delete:");
+        println!("  --all      Delete both database and config");
+        println!("  --data     Delete only the database");
+        println!("  --config   Delete only the configuration");
+        return Ok(());
+    }
+
+    let db_path = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("toggl-timeguru")
+        .join("timeguru.db");
+
+    let config_path = confy::get_configuration_file_path("toggl-timeguru", "config")
+        .unwrap_or_else(|_| std::path::PathBuf::from("~/.config/toggl-timeguru/config.toml"));
+
+    println!("\nThe following will be deleted:");
+    if delete_data {
+        println!("  Database: {}", db_path.display());
+    }
+    if delete_config {
+        println!("  Config:   {}", config_path.display());
+    }
+
+    if !confirm {
+        print!("\nAre you sure you want to continue? (y/N): ");
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        if input.trim().to_lowercase() != "y" {
+            println!("Aborted.");
+            return Ok(());
+        }
+    }
+
+    let mut deleted_items = Vec::new();
+    let mut errors = Vec::new();
+
+    if delete_data && db_path.exists() {
+        match std::fs::remove_file(&db_path) {
+            Ok(_) => {
+                deleted_items.push(format!("Database: {}", db_path.display()));
+                let parent_dir = db_path.parent();
+                if let Some(dir) = parent_dir
+                    && dir.read_dir().map(|mut d| d.next().is_none()).unwrap_or(false)
+                {
+                    let _ = std::fs::remove_dir(dir);
+                }
+            }
+            Err(e) => errors.push(format!("Failed to delete database: {}", e)),
+        }
+    } else if delete_data {
+        println!("Database not found at {}", db_path.display());
+    }
+
+    if delete_config && config_path.exists() {
+        match std::fs::remove_file(&config_path) {
+            Ok(_) => {
+                deleted_items.push(format!("Config: {}", config_path.display()));
+                let parent_dir = config_path.parent();
+                if let Some(dir) = parent_dir
+                    && dir.read_dir().map(|mut d| d.next().is_none()).unwrap_or(false)
+                {
+                    let _ = std::fs::remove_dir(dir);
+                }
+            }
+            Err(e) => errors.push(format!("Failed to delete config: {}", e)),
+        }
+    } else if delete_config {
+        println!("Config not found at {}", config_path.display());
+    }
+
+    if !deleted_items.is_empty() {
+        println!("\nSuccessfully deleted:");
+        for item in deleted_items {
+            println!("  ✓ {}", item);
+        }
+    }
+
+    if !errors.is_empty() {
+        println!("\nErrors:");
+        for error in errors {
+            println!("  ✗ {}", error);
+        }
+        anyhow::bail!("Failed to delete some items");
+    }
+
+    println!("\nCleanup complete!");
+    Ok(())
+}
+
+async fn handle_export(
+    start: Option<String>,
+    end: Option<String>,
+    output: String,
+    include_metadata: bool,
+    group: bool,
+) -> Result<()> {
+    use std::fs::File;
+
+    let config = Config::load()?;
+    let db = Database::new(None)?;
+
+    let end_date = if let Some(end_str) = end {
+        Cli::parse_date(&end_str)?
+    } else {
+        Utc::now()
+    };
+
+    let start_date = if let Some(start_str) = start {
+        Cli::parse_date(&start_str)?
+    } else {
+        end_date - config.default_date_range()
+    };
+
+    let entries = db.get_time_entries(start_date, end_date, config.current_user_id)?;
+
+    if entries.is_empty() {
+        println!("No time entries found for the specified date range.");
+        return Ok(());
+    }
+
+    let file = File::create(&output)
+        .with_context(|| format!("Failed to create output file: {}", output))?;
+    let mut wtr = csv::Writer::from_writer(file);
+
+    if include_metadata {
+        wtr.write_record(["# Toggl TimeGuru Export", "", "", "", ""])?;
+        wtr.write_record([
+            &format!(
+                "# Date Range: {} to {}",
+                start_date.format("%Y-%m-%d"),
+                end_date.format("%Y-%m-%d")
+            ),
+            "",
+            "",
+            "",
+            "",
+        ])?;
+        wtr.write_record([
+            &format!("# Total Entries: {}", entries.len()),
+            "",
+            "",
+            "",
+            "",
+        ])?;
+        if let Some(user_id) = config.current_user_id {
+            wtr.write_record([&format!("# User ID: {}", user_id), "", "", "", ""])?;
+        }
+        wtr.write_record(["", "", "", "", ""])?;
+    }
+
+    if group {
+        let grouped = group_by_description(entries);
+        wtr.write_record([
+            "Description",
+            "Project",
+            "Duration (hours)",
+            "Entry Count",
+            "Billable",
+        ])?;
+
+        for entry in grouped {
+            let desc = entry
+                .description
+                .clone()
+                .unwrap_or_else(|| "(No description)".to_string());
+            let project_name = entry
+                .project_id
+                .and_then(|pid| db.get_projects().ok()?.into_iter().find(|p| p.id == pid))
+                .map(|p| p.name)
+                .unwrap_or_else(String::new);
+            let hours = if let Some(round_min) = config.round_duration_minutes {
+                entry.rounded_hours(round_min)
+            } else {
+                entry.total_hours()
+            };
+            let billable = if entry.entries.iter().all(|e| e.billable) {
+                "Yes"
+            } else if entry.entries.iter().all(|e| !e.billable) {
+                "No"
+            } else {
+                "Mixed"
+            };
+
+            wtr.write_record([
+                &desc,
+                &project_name,
+                &format!("{:.2}", hours),
+                &entry.entries.len().to_string(),
+                billable,
+            ])?;
+        }
+    } else {
+        wtr.write_record([
+            "Date",
+            "Time",
+            "Description",
+            "Project",
+            "Duration (hours)",
+            "Billable",
+        ])?;
+
+        for entry in entries {
+            let desc = entry
+                .description
+                .unwrap_or_else(|| "(No description)".to_string());
+            let project_name = entry
+                .project_id
+                .and_then(|pid| db.get_projects().ok()?.into_iter().find(|p| p.id == pid))
+                .map(|p| p.name)
+                .unwrap_or_else(String::new);
+            let hours = entry.duration as f64 / 3600.0;
+            let billable = if entry.billable { "Yes" } else { "No" };
+
+            wtr.write_record([
+                &entry.start.format("%Y-%m-%d").to_string(),
+                &entry.start.format("%H:%M").to_string(),
+                &desc,
+                &project_name,
+                &format!("{:.2}", hours),
+                billable,
+            ])?;
+        }
+    }
+
+    wtr.flush()?;
+    println!("Successfully exported to: {}", output);
     Ok(())
 }
 
