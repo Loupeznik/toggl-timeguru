@@ -169,6 +169,26 @@ SQLite tables in `src/db/schema.rs`:
 
 **Important**: Time entries use `INSERT OR REPLACE` to handle updates during sync.
 
+**Database Location**:
+- The SQLite database is stored at `{data_dir}/toggl-timeguru/timeguru.db`
+- `data_dir` is platform-specific:
+  - **macOS**: `~/Library/Application Support/toggl-timeguru/timeguru.db`
+  - **Linux**: `~/.local/share/toggl-timeguru/timeguru.db`
+  - **Windows**: `%APPDATA%\toggl-timeguru\timeguru.db`
+
+**Manual Database Deletion**:
+To manually delete the database (e.g., when switching accounts):
+```bash
+# macOS
+rm -rf ~/Library/Application\ Support/toggl-timeguru/
+
+# Linux
+rm -rf ~/.local/share/toggl-timeguru/
+
+# Windows (PowerShell)
+Remove-Item -Recurse -Force "$env:APPDATA\toggl-timeguru"
+```
+
 ### Error Handling
 
 - Application-level errors use `anyhow::Result<T>`
@@ -216,13 +236,39 @@ Several functions/methods have `#[allow(dead_code)]` because they're planned for
 ### TUI Footer Bug
 The footer shows inverted text: when grouped view is ON, it says "Toggle grouping (OFF)". This is intentional in the code but reads awkwardly - may need UX improvement in Phase 2.
 
-### Missing Feature: Project Assignment
-Currently, the application can only **read** time entries and their associated projects. There is no functionality to **assign** or **reassign** a time entry (or group of entries) to a different project. This would require:
-- Adding a PUT endpoint to `TogglClient` for updating time entries
-- UI/CLI commands to select entries and assign them to a project
-- Potentially batch update support for grouped entries
+### Project Assignment Feature (v1.1.1)
+The TUI now supports project assignment for individual time entries:
+- Press 'p' to open the project selector panel
+- Navigate with arrow keys or vim keys (j/k)
+- Search projects by typing '/' followed by search term
+- Press Enter to assign the selected project to the current time entry
+- **Limitation**: Only works in individual view (not grouped view) - use 'g' to toggle
+- Uses `Arc<TogglClient>` with `tokio::runtime::Handle::block_on()` to call async API from sync TUI
 
-This is a candidate for Phase 2 or Phase 3 depending on user needs.
+## Known Issues and Limitations
+
+### 1. Multiple Account Support
+**Issue**: When switching between Toggl API tokens (different accounts), the local database retains data from both accounts, causing mixed data to appear in the TUI and list views.
+
+**Workaround**: Manually delete the database before switching accounts (see "Manual Database Deletion" section above).
+
+**Future Enhancement**: Implement proper multi-account support with:
+- Account-specific database tables or separate database files
+- CLI command to switch between accounts
+- Visual indicator in TUI showing current account
+
+### 2. No CLI Command for Data Deletion
+**Issue**: Users cannot delete application data (database, config) via CLI commands. They must manually delete files using OS-specific commands.
+
+**Future Enhancement**: Add a `clean` or `reset` command:
+```bash
+toggl-timeguru clean --all          # Delete database + config
+toggl-timeguru clean --data         # Delete only database
+toggl-timeguru clean --config       # Delete only config
+toggl-timeguru clean --confirm      # Skip confirmation prompt
+```
+
+This would provide a safer, cross-platform way to manage application data.
 
 ## Development Workflow
 
@@ -236,6 +282,22 @@ This is a candidate for Phase 2 or Phase 3 depending on user needs.
 8. **IMPORTANT**: When completing features, update progress tracking in BOTH:
    - `docs/PROGRESS.md` - Mark tasks as completed with [x]
    - `docs/VERSION_TIMELINE.md` - Mark version sections as completed with checkmarks
+
+### Feature Request Documentation
+
+**CRITICAL**: All new feature requests or enhancements MUST be documented in the implementation docs:
+
+1. **For new features**: Add to `docs/PROGRESS.md` AND `docs/VERSION_TIMELINE.md` under the appropriate phase or version
+2. **Version assignment**: Assign features to specific versions (e.g., v1.1.1, v1.2.0) based on priority and scope
+3. **Track status**: Mark features as `PLANNED`, `IN PROGRESS`, or `✅ COMPLETED`
+4. **Include details**: Add sub-tasks with checkboxes for tracking granular progress
+5. **Update both files**: Always keep both PROGRESS.md and VERSION_TIMELINE.md in sync
+
+**Example**: When a user requests "multi-account support", add it to:
+- `docs/PROGRESS.md` under appropriate Phase 2 section with detailed sub-tasks
+- `docs/VERSION_TIMELINE.md` under the target version (e.g., v1.1.1)
+
+This ensures all feature requests are tracked and prioritized properly.
 
 ## Phase Development
 

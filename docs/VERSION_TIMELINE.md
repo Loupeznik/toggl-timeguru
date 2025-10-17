@@ -50,14 +50,29 @@
 ### Quick Win Features
 - [x] Add clipboard copy functionality for time entry descriptions (hotkey 'y')
 
-## v1.1.1 - Project Assignment & CSV Export (PLANNED)
-### Project Assignment Feature
-- [ ] Implement TUI project selector panel
-- [ ] Add project assignment for individual time entries (hotkey 'p')
-- [ ] Add batch project assignment for grouped entries
+## v1.1.1 - Project Assignment & Data Management (IN PROGRESS)
+### Project Assignment Feature ✅ COMPLETED
+- [x] Implement TUI project selector panel
+- [x] Add project assignment for individual time entries (hotkey 'p')
+- [x] Add project search functionality (hotkey '/')
+- [x] Add navigation shortcuts (j/k, PageUp/PageDown, Home/End)
+- [x] Batch assignment note: Shows message to toggle to individual view
 - [x] API support: update_time_entry_project() method added
+- [x] Async/sync integration: Using Arc<TogglClient> with Handle::block_on()
 
-### Data Export
+### Data Management & Multi-Account Support (PLANNED)
+- [ ] Add CLI command for data deletion (`toggl-timeguru clean`)
+  - [ ] `clean --all` - Delete database + config
+  - [ ] `clean --data` - Delete only database
+  - [ ] `clean --config` - Delete only config
+  - [ ] `clean --confirm` - Skip confirmation prompt
+- [ ] Implement multi-account support
+  - [ ] Store user_id with database entries
+  - [ ] Add account switching mechanism
+  - [ ] Separate databases per account OR add account filtering
+  - [ ] Visual indicator in TUI showing current account
+
+### Data Export (PLANNED)
 - [ ] Implement CSV export using csv crate
 - [ ] Add customizable CSV format options
 - [ ] Include metadata in exports (date range, filters)

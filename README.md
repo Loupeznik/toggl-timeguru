@@ -132,6 +132,38 @@ The SQLite database is stored in:
 - **macOS**: `~/Library/Application Support/toggl-timeguru/timeguru.db`
 - **Windows**: `%APPDATA%\toggl-timeguru\timeguru.db`
 
+## Troubleshooting
+
+### Deleting Application Data
+
+To manually delete the application database (useful when switching Toggl accounts):
+
+**macOS:**
+```bash
+rm -rf ~/Library/Application\ Support/toggl-timeguru/
+```
+
+**Linux:**
+```bash
+rm -rf ~/.local/share/toggl-timeguru/
+```
+
+**Windows (PowerShell):**
+```powershell
+Remove-Item -Recurse -Force "$env:APPDATA\toggl-timeguru"
+```
+
+**Note**: To also delete the configuration file, remove the config directory:
+- **macOS**: `rm -rf ~/Library/Application\ Support/toggl-timeguru/config.toml`
+- **Linux**: `rm -rf ~/.config/toggl-timeguru/`
+- **Windows**: `Remove-Item -Recurse -Force "$env:APPDATA\toggl-timeguru\config.toml"`
+
+### Known Limitations
+
+1. **Multiple Accounts**: The application currently does not support multiple Toggl accounts. When switching API tokens, manually delete the database first (see above) to avoid mixing data from different accounts.
+
+2. **Data Management**: There is currently no CLI command to reset or clean application data. This feature is planned for a future release.
+
 ## Development
 
 ### Requirements
