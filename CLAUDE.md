@@ -209,6 +209,50 @@ Remove-Item -Recurse -Force "$env:APPDATA\toggl-timeguru"
 - All API calls are async
 - Database and UI operations are sync (wrapped in async handlers)
 
+#### **CRITICAL: Calling Async Code from Sync TUI Context**
+
+**Issue**: Cannot use `Handle::block_on()` from within an async runtime context. This causes a panic:
+```
+Cannot start a runtime from within a runtime. This happens because a function (like `block_on`)
+attempted to block the current thread while the thread is being used to drive asynchronous tasks.
+```
+
+**Why it happens**:
+1. `main()` is marked with `#[tokio::main]`, creating a tokio runtime
+2. All command handlers (e.g., `handle_tui()`) are async functions running on that runtime
+3. The TUI event loop runs synchronously but on a thread owned by the tokio runtime
+4. Calling `Handle::block_on()` tries to block that thread, creating a runtime conflict
+
+**Solution**: Use `Handle::spawn()` + sync channels instead of `block_on()`:
+
+```rust
+// ❌ WRONG - This will panic!
+let handle = tokio::runtime::Handle::current();
+let result = handle.block_on(client.some_async_method());
+
+// ✅ CORRECT - Spawn async task and wait via channel
+let (tx, rx) = std::sync::mpsc::channel();
+let client_clone = client.clone();
+
+handle.spawn(async move {
+    let result = client_clone.some_async_method().await;
+    let _ = tx.send(result);
+});
+
+match rx.recv() {
+    Ok(Ok(value)) => { /* success */ }
+    Ok(Err(e)) => { /* API error */ }
+    Err(e) => { /* channel error */ }
+}
+```
+
+**When this pattern is needed**:
+- Calling async API methods from synchronous TUI event handlers
+- Any sync code that needs to execute async operations while running on a tokio runtime
+- Bridge between sync UI code and async backend operations
+
+**Reference Implementation**: See `src/ui/app.rs::assign_project_to_entry()` for the complete pattern (lines 672-714 and 761-801).
+
 ## Important Implementation Details
 
 ### Date Parsing
@@ -237,13 +281,15 @@ Several functions/methods have `#[allow(dead_code)]` because they're planned for
 The footer shows inverted text: when grouped view is ON, it says "Toggle grouping (OFF)". This is intentional in the code but reads awkwardly - may need UX improvement in Phase 2.
 
 ### Project Assignment Feature (v1.1.1)
-The TUI now supports project assignment for individual time entries:
+The TUI now supports project assignment for both individual and grouped time entries:
 - Press 'p' to open the project selector panel
 - Navigate with arrow keys or vim keys (j/k)
 - Search projects by typing '/' followed by search term
 - Press Enter to assign the selected project to the current time entry
-- **Limitation**: Only works in individual view (not grouped view) - use 'g' to toggle
-- Uses `Arc<TogglClient>` with `tokio::runtime::Handle::block_on()` to call async API from sync TUI
+- **Individual view**: Assigns project to the selected single entry
+- **Grouped view**: Batch assigns project to ALL entries in the selected group
+- Uses `Arc<TogglClient>` with `tokio::runtime::Handle::spawn()` + sync channels to call async API from sync TUI
+- See "CRITICAL: Calling Async Code from Sync TUI Context" section for implementation details
 
 ## Known Issues and Limitations
 
