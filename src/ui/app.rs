@@ -32,6 +32,15 @@ pub struct App {
     pub show_filter_panel: bool,
     pub active_filter: TimeEntryFilter,
     pub clipboard_message: Option<String>,
+    pub show_project_selector: bool,
+    #[allow(dead_code)]
+    pub project_selector_state: ListState,
+    #[allow(dead_code)]
+    pub project_search_query: String,
+    #[allow(dead_code)]
+    pub filtered_projects: Vec<Project>,
+    #[allow(dead_code)]
+    pub status_message: Option<String>,
 }
 
 impl App {
@@ -47,9 +56,16 @@ impl App {
             list_state.select(Some(0));
         }
 
-        let projects_map: HashMap<i64, Project> = projects.into_iter().map(|p| (p.id, p)).collect();
+        let projects_map: HashMap<i64, Project> = projects.iter().map(|p| (p.id, p.clone())).collect();
+        let mut filtered_projects = projects.clone();
+        filtered_projects.sort_by(|a, b| a.name.cmp(&b.name));
 
         let all_entries = time_entries.clone();
+
+        let mut project_selector_state = ListState::default();
+        if !filtered_projects.is_empty() {
+            project_selector_state.select(Some(0));
+        }
 
         Self {
             time_entries,
@@ -68,6 +84,11 @@ impl App {
             show_filter_panel: false,
             active_filter: TimeEntryFilter::new(),
             clipboard_message: None,
+            show_project_selector: false,
+            project_selector_state,
+            project_search_query: String::new(),
+            filtered_projects,
+            status_message: None,
         }
     }
 
@@ -376,7 +397,22 @@ impl App {
     }
 
     fn ui(&mut self, f: &mut Frame) {
-        if self.show_filter_panel {
+        if self.show_project_selector {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Min(0),
+                    Constraint::Length(12),
+                    Constraint::Length(4),
+                ])
+                .split(f.area());
+
+            self.render_header(f, chunks[0]);
+            self.render_list(f, chunks[1]);
+            self.render_project_selector_panel(f, chunks[2]);
+            self.render_footer(f, chunks[3]);
+        } else if self.show_filter_panel {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -599,6 +635,33 @@ impl App {
         let panel = Paragraph::new(filter_lines)
             .style(Style::default().fg(Color::Gray))
             .block(Block::default().borders(Borders::ALL).title("Filters"));
+
+        f.render_widget(panel, area);
+    }
+
+    fn render_project_selector_panel(&self, f: &mut Frame, area: Rect) {
+        let panel_lines = vec![
+            Line::from(vec![Span::styled(
+                "Select Project (Placeholder)",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(""),
+            Line::from(vec![Span::raw("Project list will appear here...")]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "Controls:",
+                Style::default().fg(Color::Yellow),
+            )]),
+            Line::from(vec![Span::raw(
+                "  ↑↓/jk: Navigate  │  Enter: Select  │  Esc: Cancel",
+            )]),
+        ];
+
+        let panel = Paragraph::new(panel_lines)
+            .style(Style::default().fg(Color::Gray))
+            .block(Block::default().borders(Borders::ALL).title("Assign Project"));
 
         f.render_widget(panel, area);
     }
