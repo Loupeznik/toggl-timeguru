@@ -232,10 +232,17 @@ impl TogglClient {
         entry_id: i64,
         project_id: Option<i64>,
     ) -> Result<TimeEntry> {
+        info!(
+            "update_time_entry_project called: workspace={}, entry={}, project={:?}",
+            workspace_id, entry_id, project_id
+        );
+
         let url = format!(
             "{}/workspaces/{}/time_entries/{}",
             self.base_url, workspace_id, entry_id
         );
+
+        debug!("API URL: {}", url);
 
         let mut body = serde_json::Map::new();
         if let Some(pid) = project_id {
@@ -247,19 +254,27 @@ impl TogglClient {
             body.insert("project_id".to_string(), serde_json::Value::Null);
         }
 
-        debug!(
-            "Updating time entry {} with project_id: {:?}",
-            entry_id, project_id
-        );
+        debug!("Request body: {:?}", body);
 
-        let response = self
+        info!("Sending PUT request to Toggl API...");
+
+        let response = match self
             .client
             .put(&url)
             .header(header::AUTHORIZATION, self.auth_header())
             .json(&body)
             .send()
             .await
-            .context("Failed to update time entry")?;
+        {
+            Ok(resp) => {
+                debug!("Received response from API");
+                resp
+            }
+            Err(e) => {
+                error!("Network error sending PUT request: {}", e);
+                return Err(anyhow::anyhow!("Network error: {}", e));
+            }
+        };
 
         match response.status() {
             StatusCode::OK => {

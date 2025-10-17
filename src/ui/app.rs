@@ -669,12 +669,17 @@ impl App {
                     entry.workspace_id
                 );
 
-                match handle.block_on(client.update_time_entry_project(
-                    entry.workspace_id,
-                    entry.id,
-                    Some(project_id),
-                )) {
-                    Ok(_) => {
+                tracing::debug!("About to call handle.block_on for entry {}", entry.id);
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    handle.block_on(client.update_time_entry_project(
+                        entry.workspace_id,
+                        entry.id,
+                        Some(project_id),
+                    ))
+                }));
+
+                match result {
+                    Ok(Ok(_)) => {
                         tracing::debug!("Successfully assigned project to entry {}", entry.id);
                         success_count += 1;
 
@@ -690,8 +695,20 @@ impl App {
                             all_entry.project_id = Some(project_id);
                         }
                     }
-                    Err(e) => {
-                        tracing::error!("Failed to assign project to entry {}: {}", entry.id, e);
+                    Ok(Err(e)) => {
+                        tracing::error!("API error assigning project to entry {}: {}", entry.id, e);
+                        fail_count += 1;
+                    }
+                    Err(panic_err) => {
+                        tracing::error!(
+                            "PANIC occurred while assigning project to entry {}",
+                            entry.id
+                        );
+                        if let Some(s) = panic_err.downcast_ref::<&str>() {
+                            tracing::error!("Panic message: {}", s);
+                        } else if let Some(s) = panic_err.downcast_ref::<String>() {
+                            tracing::error!("Panic message: {}", s);
+                        }
                         fail_count += 1;
                     }
                 }
@@ -742,13 +759,20 @@ impl App {
             let entry_id = entry.id;
             let workspace_id = entry.workspace_id;
 
-            tracing::debug!("Calling API to update time entry project");
-            match handle.block_on(client.update_time_entry_project(
-                workspace_id,
-                entry_id,
-                Some(project_id),
-            )) {
-                Ok(_updated_entry) => {
+            tracing::debug!(
+                "About to call handle.block_on for single entry {}",
+                entry_id
+            );
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                handle.block_on(client.update_time_entry_project(
+                    workspace_id,
+                    entry_id,
+                    Some(project_id),
+                ))
+            }));
+
+            match result {
+                Ok(Ok(_updated_entry)) => {
                     tracing::info!("Successfully assigned project to entry {}", entry_id);
 
                     if let Some(entry_mut) = self.time_entries.get_mut(selected_entry_idx) {
@@ -765,9 +789,19 @@ impl App {
                     self.project_search_query.clear();
                     self.reset_filtered_projects();
                 }
-                Err(e) => {
-                    tracing::error!("Failed to assign project: {}", e);
+                Ok(Err(e)) => {
+                    tracing::error!("API error: {}", e);
                     self.status_message = Some(format!("Failed to assign project: {}", e));
+                }
+                Err(panic_err) => {
+                    tracing::error!("PANIC occurred while assigning project");
+                    if let Some(s) = panic_err.downcast_ref::<&str>() {
+                        tracing::error!("Panic message: {}", s);
+                    } else if let Some(s) = panic_err.downcast_ref::<String>() {
+                        tracing::error!("Panic message: {}", s);
+                    }
+                    self.status_message =
+                        Some("Crashed while assigning project - check logs".to_string());
                 }
             }
         }

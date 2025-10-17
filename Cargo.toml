@@ -20,7 +20,8 @@ confy = "0.6"
 ring = "0.17"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
 base64 = "0.22"
 dirs = "5.0"
 arboard = "3.4"
