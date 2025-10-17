@@ -1,4 +1,5 @@
 use crate::toggl::models::{GroupedTimeEntry, Project, TimeEntry};
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
 pub fn group_by_description(entries: Vec<TimeEntry>) -> Vec<GroupedTimeEntry> {
@@ -17,6 +18,7 @@ pub fn group_by_description(entries: Vec<TimeEntry>) -> Vec<GroupedTimeEntry> {
             GroupedTimeEntry {
                 description,
                 project_id,
+                date: None,
                 entries,
                 total_duration,
             }
@@ -26,6 +28,41 @@ pub fn group_by_description(entries: Vec<TimeEntry>) -> Vec<GroupedTimeEntry> {
     grouped.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
 
     grouped
+}
+
+type GroupKey = (Option<String>, Option<i64>, DateTime<Utc>);
+
+pub fn group_by_description_and_day(entries: Vec<TimeEntry>) -> Vec<GroupedTimeEntry> {
+    let mut groups: HashMap<GroupKey, Vec<TimeEntry>> = HashMap::new();
+    let mut order: Vec<GroupKey> = Vec::new();
+
+    for entry in entries {
+        let date = entry.start.date_naive().and_hms_opt(0, 0, 0).unwrap();
+        let date_utc = DateTime::<Utc>::from_naive_utc_and_offset(date, Utc);
+        let key = (entry.description.clone(), entry.project_id, date_utc);
+
+        if !groups.contains_key(&key) {
+            order.push(key.clone());
+        }
+        groups.entry(key).or_default().push(entry);
+    }
+
+    order
+        .into_iter()
+        .map(|key| {
+            let (description, project_id, date) = key;
+            let entries = groups.remove(&(description.clone(), project_id, date)).unwrap();
+            let total_duration: i64 = entries.iter().map(|e| e.duration).sum();
+
+            GroupedTimeEntry {
+                description,
+                project_id,
+                date: Some(date),
+                entries,
+                total_duration,
+            }
+        })
+        .collect()
 }
 
 pub fn filter_by_project(entries: Vec<TimeEntry>, project_id: i64) -> Vec<TimeEntry> {
@@ -151,6 +188,12 @@ pub fn calculate_non_billable_duration(entries: &[TimeEntry]) -> i64 {
         .sum()
 }
 
+#[allow(dead_code)]
+pub fn sort_by_date(mut entries: Vec<TimeEntry>) -> Vec<TimeEntry> {
+    entries.sort_by(|a, b| a.start.cmp(&b.start));
+    entries
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,6 +213,35 @@ mod tests {
             billable: false,
             start: Utc::now(),
             stop: Some(Utc::now()),
+            duration,
+            description: Some(description.to_string()),
+            tags: None,
+            tag_ids: None,
+            duronly: false,
+            at: Utc::now(),
+            server_deleted_at: None,
+            user_id: 1,
+            uid: None,
+            wid: None,
+            pid: None,
+        }
+    }
+
+    fn create_test_entry_with_date(
+        id: i64,
+        description: &str,
+        duration: i64,
+        project_id: Option<i64>,
+        start: DateTime<Utc>,
+    ) -> TimeEntry {
+        TimeEntry {
+            id,
+            workspace_id: 1,
+            project_id,
+            task_id: None,
+            billable: false,
+            start,
+            stop: Some(start),
             duration,
             description: Some(description.to_string()),
             tags: None,
@@ -329,5 +401,160 @@ mod tests {
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].id, 1);
         assert!(filtered[0].billable);
+    }
+
+    #[test]
+    fn test_group_by_description_and_day() {
+        use chrono::TimeZone;
+
+        let day1 = Utc.with_ymd_and_hms(2025, 1, 20, 10, 0, 0).unwrap();
+        let day2 = Utc.with_ymd_and_hms(2025, 1, 21, 14, 30, 0).unwrap();
+        let day3 = Utc.with_ymd_and_hms(2025, 1, 22, 9, 15, 0).unwrap();
+
+        let entries = vec![
+            create_test_entry_with_date(1, "Meeting", 3600, Some(1), day1),
+            create_test_entry_with_date(2, "Meeting", 1800, Some(1), day2),
+            create_test_entry_with_date(3, "Meeting", 1800, Some(1), day2),
+            create_test_entry_with_date(4, "Meeting", 3600, Some(2), day3),
+            create_test_entry_with_date(5, "Coding", 7200, Some(1), day1),
+        ];
+
+        let grouped = group_by_description_and_day(entries);
+
+        assert_eq!(grouped.len(), 4);
+
+        assert!(grouped[0].date.is_some());
+        assert!(grouped[1].date.is_some());
+        assert!(grouped[2].date.is_some());
+        assert!(grouped[3].date.is_some());
+
+        let day2_meeting = grouped.iter().find(|g| {
+            g.date == Some(Utc.with_ymd_and_hms(2025, 1, 21, 0, 0, 0).unwrap())
+                && g.description == Some("Meeting".to_string())
+        }).unwrap();
+        assert_eq!(day2_meeting.total_duration, 3600);
+        assert_eq!(day2_meeting.entries.len(), 2);
+    }
+
+    #[test]
+    fn test_group_by_description_and_day_with_sorting() {
+        use chrono::TimeZone;
+
+        let day1 = Utc.with_ymd_and_hms(2025, 1, 20, 10, 0, 0).unwrap();
+        let day2 = Utc.with_ymd_and_hms(2025, 1, 21, 14, 30, 0).unwrap();
+        let day3 = Utc.with_ymd_and_hms(2025, 1, 22, 9, 15, 0).unwrap();
+
+        let mut entries = vec![
+            create_test_entry_with_date(1, "Task", 1800, Some(1), day3),
+            create_test_entry_with_date(2, "Task", 7200, Some(1), day1),
+            create_test_entry_with_date(3, "Task", 3600, Some(1), day2),
+        ];
+
+        entries.sort_by(|a, b| a.start.cmp(&b.start));
+        let grouped = group_by_description_and_day(entries);
+
+        assert_eq!(grouped.len(), 3);
+
+        let day1_midnight = Utc.with_ymd_and_hms(2025, 1, 20, 0, 0, 0).unwrap();
+        let day2_midnight = Utc.with_ymd_and_hms(2025, 1, 21, 0, 0, 0).unwrap();
+        let day3_midnight = Utc.with_ymd_and_hms(2025, 1, 22, 0, 0, 0).unwrap();
+
+        assert_eq!(grouped[0].date.unwrap(), day1_midnight);
+        assert_eq!(grouped[0].total_duration, 7200);
+
+        assert_eq!(grouped[1].date.unwrap(), day2_midnight);
+        assert_eq!(grouped[1].total_duration, 3600);
+
+        assert_eq!(grouped[2].date.unwrap(), day3_midnight);
+        assert_eq!(grouped[2].total_duration, 1800);
+    }
+
+    #[test]
+    fn test_group_by_description_and_day_same_day_different_projects() {
+        use chrono::TimeZone;
+
+        let day1 = Utc.with_ymd_and_hms(2025, 1, 20, 10, 0, 0).unwrap();
+        let day1_later = Utc.with_ymd_and_hms(2025, 1, 20, 15, 0, 0).unwrap();
+
+        let entries = vec![
+            create_test_entry_with_date(1, "Task", 3600, Some(1), day1),
+            create_test_entry_with_date(2, "Task", 1800, Some(2), day1_later),
+        ];
+
+        let grouped = group_by_description_and_day(entries);
+
+        assert_eq!(grouped.len(), 2);
+        assert_eq!(grouped[0].description, Some("Task".to_string()));
+        assert_eq!(grouped[1].description, Some("Task".to_string()));
+        assert_ne!(grouped[0].project_id, grouped[1].project_id);
+    }
+
+    #[test]
+    fn test_sort_by_date_ascending() {
+        use chrono::TimeZone;
+
+        let day1 = Utc.with_ymd_and_hms(2025, 1, 20, 10, 0, 0).unwrap();
+        let day2 = Utc.with_ymd_and_hms(2025, 1, 21, 14, 30, 0).unwrap();
+        let day3 = Utc.with_ymd_and_hms(2025, 1, 22, 9, 15, 0).unwrap();
+
+        let entries = vec![
+            create_test_entry_with_date(3, "Task C", 1800, Some(1), day3),
+            create_test_entry_with_date(1, "Task A", 3600, Some(1), day1),
+            create_test_entry_with_date(2, "Task B", 7200, Some(1), day2),
+        ];
+
+        let sorted = sort_by_date(entries);
+
+        assert_eq!(sorted.len(), 3);
+        assert_eq!(sorted[0].id, 1);
+        assert_eq!(sorted[0].start, day1);
+        assert_eq!(sorted[1].id, 2);
+        assert_eq!(sorted[1].start, day2);
+        assert_eq!(sorted[2].id, 3);
+        assert_eq!(sorted[2].start, day3);
+    }
+
+    #[test]
+    fn test_sort_by_date_with_same_day_different_times() {
+        use chrono::TimeZone;
+
+        let morning = Utc.with_ymd_and_hms(2025, 1, 20, 9, 0, 0).unwrap();
+        let afternoon = Utc.with_ymd_and_hms(2025, 1, 20, 14, 0, 0).unwrap();
+        let evening = Utc.with_ymd_and_hms(2025, 1, 20, 18, 0, 0).unwrap();
+
+        let entries = vec![
+            create_test_entry_with_date(3, "Evening", 1800, Some(1), evening),
+            create_test_entry_with_date(1, "Morning", 3600, Some(1), morning),
+            create_test_entry_with_date(2, "Afternoon", 7200, Some(1), afternoon),
+        ];
+
+        let sorted = sort_by_date(entries);
+
+        assert_eq!(sorted.len(), 3);
+        assert_eq!(sorted[0].description, Some("Morning".to_string()));
+        assert_eq!(sorted[1].description, Some("Afternoon".to_string()));
+        assert_eq!(sorted[2].description, Some("Evening".to_string()));
+    }
+
+    #[test]
+    fn test_sort_by_date_already_sorted() {
+        use chrono::TimeZone;
+
+        let day1 = Utc.with_ymd_and_hms(2025, 1, 20, 10, 0, 0).unwrap();
+        let day2 = Utc.with_ymd_and_hms(2025, 1, 21, 10, 0, 0).unwrap();
+        let day3 = Utc.with_ymd_and_hms(2025, 1, 22, 10, 0, 0).unwrap();
+
+        let entries = vec![
+            create_test_entry_with_date(1, "Task A", 3600, Some(1), day1),
+            create_test_entry_with_date(2, "Task B", 1800, Some(1), day2),
+            create_test_entry_with_date(3, "Task C", 7200, Some(1), day3),
+        ];
+
+        let sorted = sort_by_date(entries);
+
+        assert_eq!(sorted.len(), 3);
+        assert_eq!(sorted[0].id, 1);
+        assert_eq!(sorted[1].id, 2);
+        assert_eq!(sorted[2].id, 3);
     }
 }

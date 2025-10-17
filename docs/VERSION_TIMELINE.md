@@ -22,6 +22,12 @@
 - [x] Display project names with color coding in entry rows
 - [x] Sync projects to SQLite database
 
+### Grouping & Sorting
+- [x] Add day-based grouping toggle (hotkey 'd')
+- [x] Implement grouping by (description, project, date) tuple
+- [x] Add date sorting toggle for both grouped and individual entries (hotkey 's')
+- [x] Grouping preserves input order (sorted entries result in sorted groups)
+
 ### Improved Logging
 - [x] Add detailed debug logging throughout codebase
 - [x] Configure log levels via RUST_LOG environment variable
@@ -29,8 +35,10 @@
 - [x] Add structured logging with tracing subscriber
 
 ### Testing & Error Handling
-- [x] Expand unit test coverage (15 tests total)
+- [x] Expand unit test coverage (21 tests total)
 - [x] Add tests for filtering (project, tag, client, combined, billable)
+- [x] Add tests for day-based grouping (3 tests)
+- [x] Add tests for date sorting (3 tests)
 - [x] Improve error messages with context using anyhow
 - [x] Add retry logic for API failures (exponential backoff, 3 retries)
 - [x] Implement rate limiting handling (429 status code)

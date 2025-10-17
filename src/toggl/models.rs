@@ -64,6 +64,7 @@ pub struct GroupedTimeEntry {
     pub description: Option<String>,
     #[allow(dead_code)]
     pub project_id: Option<i64>,
+    pub date: Option<DateTime<Utc>>,
     pub entries: Vec<TimeEntry>,
     pub total_duration: i64,
 }
@@ -91,6 +92,7 @@ mod tests {
         GroupedTimeEntry {
             description: Some("Test".to_string()),
             project_id: None,
+            date: None,
             entries: vec![],
             total_duration: duration_seconds,
         }

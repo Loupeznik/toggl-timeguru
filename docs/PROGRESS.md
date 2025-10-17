@@ -42,13 +42,17 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [x] Add simple navigation (up/down, quit)
 - [x] Display time entry details (description, duration, project)
 - [x] Add grouping toggle (g key)
+- [x] Add day-based grouping toggle (d key)
+- [x] Add date sorting toggle (s key)
 - [x] Add rounding toggle (r key)
 
 ### Time Entry Processing
 - [x] Implement date range filtering
 - [x] Add time entry grouping by exact description match
+- [x] Add day-based grouping (groups by description, project, and date)
 - [x] Calculate total duration for grouped entries
 - [x] Implement duration rounding functionality (rounds UP)
+- [x] Add date sorting for day-grouped entries
 
 ### CLI Interface
 - [x] Design command-line arguments structure with clap

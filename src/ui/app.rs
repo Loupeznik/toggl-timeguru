@@ -24,6 +24,8 @@ pub struct App {
     pub start_date: DateTime<Utc>,
     pub end_date: DateTime<Utc>,
     pub show_grouped: bool,
+    pub group_by_day: bool,
+    pub sort_by_date: bool,
     pub show_rounded: bool,
     pub round_minutes: Option<i64>,
     pub projects: HashMap<i64, Project>,
@@ -58,6 +60,8 @@ impl App {
             start_date,
             end_date,
             show_grouped: false,
+            group_by_day: false,
+            sort_by_date: false,
             show_rounded: true,
             round_minutes,
             projects: projects_map,
@@ -128,6 +132,12 @@ impl App {
                 KeyCode::Char('g') => {
                     self.toggle_grouping();
                 }
+                KeyCode::Char('d') => {
+                    self.toggle_day_grouping();
+                }
+                KeyCode::Char('s') => {
+                    self.toggle_sort_by_date();
+                }
                 KeyCode::Char('r') => {
                     self.toggle_rounding();
                 }
@@ -195,8 +205,44 @@ impl App {
         self.list_state.select(Some(0));
     }
 
+    fn toggle_day_grouping(&mut self) {
+        self.group_by_day = !self.group_by_day;
+        self.recompute_grouped_entries();
+        self.list_state.select(Some(0));
+    }
+
+    fn recompute_grouped_entries(&mut self) {
+        use crate::processor::{group_by_description, group_by_description_and_day};
+
+        self.grouped_entries = if self.group_by_day {
+            group_by_description_and_day(self.time_entries.clone())
+        } else {
+            group_by_description(self.time_entries.clone())
+        };
+    }
+
+    fn sort_entries(&mut self) {
+        if self.sort_by_date {
+            self.time_entries.sort_by(|a, b| a.start.cmp(&b.start));
+        }
+    }
+
     fn toggle_rounding(&mut self) {
         self.show_rounded = !self.show_rounded;
+    }
+
+    fn toggle_sort_by_date(&mut self) {
+        self.sort_by_date = !self.sort_by_date;
+        if self.sort_by_date {
+            self.time_entries.sort_by(|a, b| a.start.cmp(&b.start));
+        } else {
+            let projects_vec: Vec<_> = self.projects.values().cloned().collect();
+            self.time_entries = self
+                .active_filter
+                .apply(self.all_entries.clone(), &projects_vec);
+        }
+        self.recompute_grouped_entries();
+        self.list_state.select(Some(0));
     }
 
     fn toggle_filter_panel(&mut self) {
@@ -222,6 +268,8 @@ impl App {
         self.time_entries = self
             .active_filter
             .apply(self.all_entries.clone(), &projects_vec);
+        self.sort_entries();
+        self.recompute_grouped_entries();
         self.list_state.select(if self.time_entries.is_empty() {
             None
         } else {
@@ -402,15 +450,25 @@ impl App {
                         entry.total_hours()
                     };
 
-                    let mut spans = vec![
-                        Span::styled(
-                            format!("{:.2}h", hours),
-                            Style::default()
-                                .fg(Color::Green)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        Span::raw(" - "),
-                    ];
+                    let mut spans = vec![];
+
+                    if self.group_by_day
+                        && let Some(date) = entry.date
+                    {
+                        spans.push(Span::styled(
+                            date.format("%Y-%m-%d").to_string(),
+                            Style::default().fg(Color::Yellow),
+                        ));
+                        spans.push(Span::raw(" - "));
+                    }
+
+                    spans.push(Span::styled(
+                        format!("{:.2}h", hours),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ));
+                    spans.push(Span::raw(" - "));
 
                     if let Some(project_id) = entry.project_id
                         && let Some(project) = self.projects.get(&project_id)
@@ -547,6 +605,8 @@ impl App {
 
     fn render_footer(&self, f: &mut Frame, area: Rect) {
         let grouping_status = if self.show_grouped { "ON" } else { "OFF" };
+        let day_grouping_status = if self.group_by_day { "ON" } else { "OFF" };
+        let sort_status = if self.sort_by_date { "ON" } else { "OFF" };
         let rounding_status = if self.show_rounded { "ON" } else { "OFF" };
         let filter_indicator = if self.active_filter.billable_only {
             " [FILTERED]"
@@ -573,6 +633,8 @@ impl App {
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
                 Span::styled("Toggles: ", Style::default().fg(Color::Yellow)),
                 Span::raw(format!("g:Group({}) ", grouping_status)),
+                Span::raw(format!("d:Day({}) ", day_grouping_status)),
+                Span::raw(format!("s:Sort({}) ", sort_status)),
                 Span::raw(format!("r:Round({}) ", rounding_status)),
                 Span::raw("f:Filter "),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
