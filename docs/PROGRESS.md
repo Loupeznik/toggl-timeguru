@@ -75,11 +75,31 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [x] Fix Windows TUI navigation bug where k/j keys skip two rows instead of one (filter KeyEventKind::Press)
 - [x] Add clipboard copy functionality for time entry descriptions (hotkey 'y' using arboard crate)
 
-### v1.1.1 Project Assignment (PLANNED)
-- [ ] Implement TUI project selector panel
-- [ ] Add project assignment for individual time entries (hotkey 'p')
-- [ ] Add batch project assignment for grouped entries
+### v1.1.1 Project Assignment ✅ COMPLETED
+- [x] Implement TUI project selector panel with color-coded projects
+- [x] Add project assignment for individual time entries (hotkey 'p')
+- [x] Add project search functionality (hotkey '/' in selector)
+- [x] Add navigation shortcuts (j/k, PageUp/PageDown, Home/End)
+- [x] Batch assignment: Shows message to toggle to individual view
 - [x] API support: update_time_entry_project() method added to TogglClient
+- [x] Async/sync integration using Arc<TogglClient> with Handle::block_on()
+- [x] Status messages for success/failure feedback
+
+### v1.1.1 Data Management & Multi-Account Support (PLANNED)
+- [ ] Add CLI command for data deletion (`toggl-timeguru clean`)
+  - [ ] `clean --all` - Delete both database and config
+  - [ ] `clean --data` - Delete only database
+  - [ ] `clean --config` - Delete only configuration
+  - [ ] `clean --confirm` - Skip confirmation prompt for automation
+  - [ ] Cross-platform support (macOS/Linux/Windows)
+- [ ] Implement multi-account support
+  - [ ] Add user_id filtering to database queries
+  - [ ] Create account switching mechanism
+  - [ ] Option 1: Separate databases per account
+  - [ ] Option 2: Single database with account filtering
+  - [ ] Add visual indicator in TUI showing current account
+  - [ ] Prevent data mixing when switching API tokens
+- [x] Document database location and manual deletion procedures
 
 ### CI/CD & Build Automation (Priority)
 - [ ] Set up GitHub Actions workflow

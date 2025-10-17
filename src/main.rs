@@ -29,6 +29,31 @@ async fn main() -> Result<()> {
 
     init_tracing(cli.verbose);
 
+    std::panic::set_hook(Box::new(|panic_info| {
+        tracing::error!("========================================");
+        tracing::error!("PANIC OCCURRED!");
+        tracing::error!("Panic info: {}", panic_info);
+        if let Some(location) = panic_info.location() {
+            tracing::error!(
+                "Panic location: {}:{}:{}",
+                location.file(),
+                location.line(),
+                location.column()
+            );
+        }
+        if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            tracing::error!("Panic message: {}", s);
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            tracing::error!("Panic message: {}", s);
+        }
+        tracing::error!("========================================");
+        eprintln!("\n\nAPPLICATION CRASHED! Check log file for details.");
+        eprintln!(
+            "Log location: {}/app.log",
+            std::env::temp_dir().join("toggl-timeguru").display()
+        );
+    }));
+
     if let Some(command) = cli.command {
         match command {
             Commands::Config {
@@ -63,23 +88,45 @@ async fn main() -> Result<()> {
 }
 
 fn init_tracing(verbose: bool) {
+    use tracing_appender::rolling::{RollingFileAppender, Rotation};
+    use tracing_subscriber::fmt::writer::MakeWriterExt;
+
     let default_level = if verbose { "debug" } else { "info" };
 
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default_level));
 
+    let log_dir = std::env::temp_dir().join("toggl-timeguru");
+    std::fs::create_dir_all(&log_dir).ok();
+
+    let file_appender = RollingFileAppender::new(Rotation::DAILY, log_dir.clone(), "app.log");
+
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_writer(file_appender)
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_file(true)
+        .with_line_number(true)
+        .with_ansi(false);
+
+    let stderr_layer = tracing_subscriber::fmt::layer()
+        .with_writer(std::io::stderr.with_max_level(tracing::Level::ERROR))
+        .with_target(true)
+        .with_thread_ids(false)
+        .with_file(true)
+        .with_line_number(true);
+
     tracing_subscriber::registry()
         .with(filter)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_target(true)
-                .with_thread_ids(false)
-                .with_file(true)
-                .with_line_number(true),
-        )
+        .with(file_layer)
+        .with(stderr_layer)
         .init();
 
-    tracing::debug!("Tracing initialized with level: {}", default_level);
+    tracing::info!("========================================");
+    tracing::info!("Toggl TimeGuru starting");
+    tracing::info!("Log file location: {}/app.log", log_dir.display());
+    tracing::info!("Tracing initialized with level: {}", default_level);
+    tracing::info!("========================================");
 }
 
 async fn handle_config(
@@ -273,7 +320,7 @@ async fn handle_sync(
 async fn handle_tui(
     start: Option<String>,
     end: Option<String>,
-    _cli_api_token: Option<String>,
+    cli_api_token: Option<String>,
 ) -> Result<()> {
     let config = Config::load()?;
     let db = Database::new(None)?;
@@ -301,6 +348,16 @@ async fn handle_tui(
 
     let projects = db.get_projects().unwrap_or_default();
 
+    let client = match get_api_token(cli_api_token, &config) {
+        Ok(token) => match TogglClient::new(token) {
+            Ok(c) => Some(std::sync::Arc::new(c)),
+            Err(_) => None,
+        },
+        Err(_) => None,
+    };
+
+    let runtime_handle = Some(tokio::runtime::Handle::current());
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -313,6 +370,8 @@ async fn handle_tui(
         end_date,
         config.round_duration_minutes,
         projects,
+        client,
+        runtime_handle,
     );
     let grouped = group_by_description(app.time_entries.clone());
     app.grouped_entries = grouped;

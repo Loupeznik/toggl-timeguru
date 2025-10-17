@@ -12,8 +12,12 @@ use ratatui::{
 };
 
 use crate::processor::TimeEntryFilter;
+use crate::toggl::TogglClient;
 use crate::toggl::models::{GroupedTimeEntry, Project, TimeEntry};
 use std::collections::HashMap;
+use std::sync::Arc;
+
+const PAGE_SIZE: usize = 10;
 
 pub struct App {
     pub time_entries: Vec<TimeEntry>,
@@ -32,6 +36,13 @@ pub struct App {
     pub show_filter_panel: bool,
     pub active_filter: TimeEntryFilter,
     pub clipboard_message: Option<String>,
+    pub show_project_selector: bool,
+    pub project_selector_state: ListState,
+    pub project_search_query: String,
+    pub filtered_projects: Vec<Project>,
+    pub status_message: Option<String>,
+    pub client: Option<Arc<TogglClient>>,
+    pub runtime_handle: Option<tokio::runtime::Handle>,
 }
 
 impl App {
@@ -41,15 +52,25 @@ impl App {
         end_date: DateTime<Utc>,
         round_minutes: Option<i64>,
         projects: Vec<Project>,
+        client: Option<Arc<TogglClient>>,
+        runtime_handle: Option<tokio::runtime::Handle>,
     ) -> Self {
         let mut list_state = ListState::default();
         if !time_entries.is_empty() {
             list_state.select(Some(0));
         }
 
-        let projects_map: HashMap<i64, Project> = projects.into_iter().map(|p| (p.id, p)).collect();
+        let projects_map: HashMap<i64, Project> =
+            projects.iter().map(|p| (p.id, p.clone())).collect();
+        let mut filtered_projects = projects.clone();
+        filtered_projects.sort_by(|a, b| a.name.cmp(&b.name));
 
         let all_entries = time_entries.clone();
+
+        let mut project_selector_state = ListState::default();
+        if !filtered_projects.is_empty() {
+            project_selector_state.select(Some(0));
+        }
 
         Self {
             time_entries,
@@ -68,6 +89,13 @@ impl App {
             show_filter_panel: false,
             active_filter: TimeEntryFilter::new(),
             clipboard_message: None,
+            show_project_selector: false,
+            project_selector_state,
+            project_search_query: String::new(),
+            filtered_projects,
+            status_message: None,
+            client,
+            runtime_handle,
         }
     }
 
@@ -90,7 +118,48 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) {
-        if self.show_filter_panel {
+        if self.show_project_selector {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('p') => {
+                    self.show_project_selector = false;
+                    self.project_search_query.clear();
+                    self.reset_filtered_projects();
+                }
+                KeyCode::Enter => {
+                    self.assign_project_to_entry();
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.next_project();
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.previous_project();
+                }
+                KeyCode::PageDown => {
+                    self.page_down_project();
+                }
+                KeyCode::PageUp => {
+                    self.page_up_project();
+                }
+                KeyCode::Home => {
+                    self.goto_first_project();
+                }
+                KeyCode::End => {
+                    self.goto_last_project();
+                }
+                KeyCode::Char('/') => {
+                    self.start_project_search();
+                }
+                KeyCode::Char(c) if !self.project_search_query.is_empty() => {
+                    self.project_search_query.push(c);
+                    self.filter_projects();
+                }
+                KeyCode::Backspace if !self.project_search_query.is_empty() => {
+                    self.project_search_query.pop();
+                    self.filter_projects();
+                }
+                _ => {}
+            }
+        } else if self.show_filter_panel {
             match key.code {
                 KeyCode::Esc | KeyCode::Char('f') => {
                     self.show_filter_panel = false;
@@ -146,6 +215,9 @@ impl App {
                 }
                 KeyCode::Char('y') => {
                     self.copy_to_clipboard();
+                }
+                KeyCode::Char('p') => {
+                    self.toggle_project_selector();
                 }
                 _ => {}
             }
@@ -249,6 +321,10 @@ impl App {
         self.show_filter_panel = !self.show_filter_panel;
     }
 
+    fn toggle_project_selector(&mut self) {
+        self.show_project_selector = !self.show_project_selector;
+    }
+
     fn toggle_billable_filter(&mut self) {
         self.active_filter = if self.active_filter.billable_only {
             TimeEntryFilter::new()
@@ -288,7 +364,7 @@ impl App {
             return;
         }
 
-        let page_size = 10;
+        let page_size = PAGE_SIZE;
         let i = match self.list_state.selected() {
             Some(i) => {
                 let new_pos = i + page_size;
@@ -310,7 +386,7 @@ impl App {
             return;
         }
 
-        let page_size = 10;
+        let page_size = PAGE_SIZE;
         let i = match self.list_state.selected() {
             Some(i) => i.saturating_sub(page_size),
             None => 0,
@@ -375,8 +451,368 @@ impl App {
         }
     }
 
+    fn next_project(&mut self) {
+        let len = self.filtered_projects.len();
+        if len == 0 {
+            return;
+        }
+
+        let i = match self.project_selector_state.selected() {
+            Some(i) => {
+                if i >= len - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.project_selector_state.select(Some(i));
+    }
+
+    fn previous_project(&mut self) {
+        let len = self.filtered_projects.len();
+        if len == 0 {
+            return;
+        }
+
+        let i = match self.project_selector_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    len - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.project_selector_state.select(Some(i));
+    }
+
+    fn page_down_project(&mut self) {
+        let len = self.filtered_projects.len();
+        if len == 0 {
+            return;
+        }
+
+        let page_size = PAGE_SIZE;
+        let i = match self.project_selector_state.selected() {
+            Some(i) => {
+                let new_pos = i + page_size;
+                if new_pos >= len { len - 1 } else { new_pos }
+            }
+            None => 0,
+        };
+        self.project_selector_state.select(Some(i));
+    }
+
+    fn page_up_project(&mut self) {
+        let len = self.filtered_projects.len();
+        if len == 0 {
+            return;
+        }
+
+        let page_size = PAGE_SIZE;
+        let i = match self.project_selector_state.selected() {
+            Some(i) => i.saturating_sub(page_size),
+            None => 0,
+        };
+        self.project_selector_state.select(Some(i));
+    }
+
+    fn goto_first_project(&mut self) {
+        if !self.filtered_projects.is_empty() {
+            self.project_selector_state.select(Some(0));
+        }
+    }
+
+    fn goto_last_project(&mut self) {
+        let len = self.filtered_projects.len();
+        if len > 0 {
+            self.project_selector_state.select(Some(len - 1));
+        }
+    }
+
+    fn start_project_search(&mut self) {
+        self.project_search_query.push('/');
+    }
+
+    fn filter_projects(&mut self) {
+        let query = self
+            .project_search_query
+            .trim_start_matches('/')
+            .to_lowercase();
+
+        if query.is_empty() {
+            self.reset_filtered_projects();
+            return;
+        }
+
+        let all_projects: Vec<_> = self.projects.values().cloned().collect();
+        self.filtered_projects = all_projects
+            .into_iter()
+            .filter(|p| p.name.to_lowercase().contains(&query))
+            .collect();
+
+        self.filtered_projects.sort_by(|a, b| a.name.cmp(&b.name));
+
+        if !self.filtered_projects.is_empty() {
+            self.project_selector_state.select(Some(0));
+        } else {
+            self.project_selector_state.select(None);
+        }
+    }
+
+    fn reset_filtered_projects(&mut self) {
+        self.filtered_projects = self.projects.values().cloned().collect();
+        self.filtered_projects.sort_by(|a, b| a.name.cmp(&b.name));
+
+        if !self.filtered_projects.is_empty() {
+            self.project_selector_state.select(Some(0));
+        }
+    }
+
+    fn assign_project_to_entry(&mut self) {
+        tracing::info!("assign_project_to_entry called");
+
+        let selected_project_idx = match self.project_selector_state.selected() {
+            Some(idx) => {
+                tracing::debug!("Selected project index: {}", idx);
+                idx
+            }
+            None => {
+                tracing::warn!("No project selected");
+                self.status_message = Some("No project selected".to_string());
+                return;
+            }
+        };
+
+        let selected_project = match self.filtered_projects.get(selected_project_idx) {
+            Some(project) => {
+                tracing::debug!("Selected project: {} (id: {})", project.name, project.id);
+                project
+            }
+            None => {
+                tracing::error!("Invalid project selection index: {}", selected_project_idx);
+                self.status_message = Some("Invalid project selection".to_string());
+                return;
+            }
+        };
+
+        let project_id = selected_project.id;
+        let project_name = selected_project.name.clone();
+
+        let selected_entry_idx = match self.list_state.selected() {
+            Some(idx) => {
+                tracing::debug!("Selected entry index: {}", idx);
+                idx
+            }
+            None => {
+                tracing::warn!("No time entry selected");
+                self.status_message = Some("No time entry selected".to_string());
+                return;
+            }
+        };
+
+        let client = match &self.client {
+            Some(c) => {
+                tracing::debug!("API client available");
+                c.clone()
+            }
+            None => {
+                tracing::error!("API client not available");
+                self.status_message = Some("API client not available".to_string());
+                return;
+            }
+        };
+
+        let handle = match &self.runtime_handle {
+            Some(h) => {
+                tracing::debug!("Runtime handle available");
+                h.clone()
+            }
+            None => {
+                tracing::error!("Runtime handle not available");
+                self.status_message = Some("Runtime not available".to_string());
+                return;
+            }
+        };
+
+        if self.show_grouped {
+            tracing::info!("Batch assignment for grouped entry");
+            let grouped_entry = match self.grouped_entries.get(selected_entry_idx) {
+                Some(e) => {
+                    tracing::debug!(
+                        "Grouped entry contains {} individual entries",
+                        e.entries.len()
+                    );
+                    e
+                }
+                None => {
+                    tracing::error!("Invalid grouped entry selection");
+                    self.status_message = Some("Invalid entry selection".to_string());
+                    return;
+                }
+            };
+
+            let mut success_count = 0;
+            let mut fail_count = 0;
+            let total_entries = grouped_entry.entries.len();
+
+            for entry in &grouped_entry.entries {
+                tracing::debug!(
+                    "Assigning project {} to entry {} in workspace {}",
+                    project_id,
+                    entry.id,
+                    entry.workspace_id
+                );
+
+                tracing::debug!("Spawning async task for entry {}", entry.id);
+
+                let (tx, rx) = std::sync::mpsc::channel();
+                let client_clone = client.clone();
+                let workspace_id = entry.workspace_id;
+                let entry_id = entry.id;
+
+                handle.spawn(async move {
+                    let result = client_clone
+                        .update_time_entry_project(workspace_id, entry_id, Some(project_id))
+                        .await;
+                    let _ = tx.send(result);
+                });
+
+                match rx.recv() {
+                    Ok(Ok(_)) => {
+                        tracing::debug!("Successfully assigned project to entry {}", entry.id);
+                        success_count += 1;
+
+                        if let Some(time_entry) =
+                            self.time_entries.iter_mut().find(|e| e.id == entry.id)
+                        {
+                            time_entry.project_id = Some(project_id);
+                        }
+
+                        if let Some(all_entry) =
+                            self.all_entries.iter_mut().find(|e| e.id == entry.id)
+                        {
+                            all_entry.project_id = Some(project_id);
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("API error assigning project to entry {}: {}", entry.id, e);
+                        fail_count += 1;
+                    }
+                    Err(e) => {
+                        tracing::error!("Channel error while waiting for API result: {}", e);
+                        fail_count += 1;
+                    }
+                }
+            }
+
+            tracing::info!(
+                "Batch assignment complete: {} succeeded, {} failed out of {}",
+                success_count,
+                fail_count,
+                total_entries
+            );
+
+            if fail_count == 0 {
+                self.status_message = Some(format!(
+                    "Assigned {} to {} entries",
+                    project_name, success_count
+                ));
+            } else {
+                self.status_message = Some(format!(
+                    "Assigned {} to {}/{} entries ({} failed)",
+                    project_name, success_count, total_entries, fail_count
+                ));
+            }
+
+            self.recompute_grouped_entries();
+            self.show_project_selector = false;
+            self.project_search_query.clear();
+            self.reset_filtered_projects();
+        } else {
+            tracing::info!("Single entry assignment");
+            let entry = match self.time_entries.get(selected_entry_idx) {
+                Some(e) => {
+                    tracing::debug!(
+                        "Assigning project {} to entry {} in workspace {}",
+                        project_id,
+                        e.id,
+                        e.workspace_id
+                    );
+                    e
+                }
+                None => {
+                    tracing::error!("Invalid entry selection");
+                    self.status_message = Some("Invalid entry selection".to_string());
+                    return;
+                }
+            };
+
+            let entry_id = entry.id;
+            let workspace_id = entry.workspace_id;
+
+            tracing::debug!("Spawning async task for single entry {}", entry_id);
+
+            let (tx, rx) = std::sync::mpsc::channel();
+            let client_clone = client.clone();
+
+            handle.spawn(async move {
+                let result = client_clone
+                    .update_time_entry_project(workspace_id, entry_id, Some(project_id))
+                    .await;
+                let _ = tx.send(result);
+            });
+
+            match rx.recv() {
+                Ok(Ok(_updated_entry)) => {
+                    tracing::info!("Successfully assigned project to entry {}", entry_id);
+
+                    if let Some(entry_mut) = self.time_entries.get_mut(selected_entry_idx) {
+                        entry_mut.project_id = Some(project_id);
+                    }
+
+                    if let Some(all_entry) = self.all_entries.iter_mut().find(|e| e.id == entry_id)
+                    {
+                        all_entry.project_id = Some(project_id);
+                    }
+
+                    self.status_message = Some(format!("Assigned project: {}", project_name));
+                    self.show_project_selector = false;
+                    self.project_search_query.clear();
+                    self.reset_filtered_projects();
+                }
+                Ok(Err(e)) => {
+                    tracing::error!("API error: {}", e);
+                    self.status_message = Some(format!("Failed to assign project: {}", e));
+                }
+                Err(e) => {
+                    tracing::error!("Channel error while waiting for API result: {}", e);
+                    self.status_message = Some("Error communicating with API task".to_string());
+                }
+            }
+        }
+    }
+
     fn ui(&mut self, f: &mut Frame) {
-        if self.show_filter_panel {
+        if self.show_project_selector {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Min(0),
+                    Constraint::Length(12),
+                    Constraint::Length(4),
+                ])
+                .split(f.area());
+
+            self.render_header(f, chunks[0]);
+            self.render_list(f, chunks[1]);
+            self.render_project_selector_panel(f, chunks[2]);
+            self.render_footer(f, chunks[3]);
+        } else if self.show_filter_panel {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -603,6 +1039,76 @@ impl App {
         f.render_widget(panel, area);
     }
 
+    fn render_project_selector_panel(&mut self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(3)])
+            .split(area);
+
+        let project_items: Vec<ListItem> = self
+            .filtered_projects
+            .iter()
+            .map(|project| {
+                let color = Self::parse_color(&project.color);
+                let spans = vec![
+                    Span::styled(
+                        format!("[{}]", project.name),
+                        Style::default().fg(color).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(" "),
+                    Span::styled(
+                        if project.active { "Active" } else { "Archived" },
+                        if project.active {
+                            Style::default().fg(Color::Green)
+                        } else {
+                            Style::default().fg(Color::DarkGray)
+                        },
+                    ),
+                ];
+                ListItem::new(Line::from(spans))
+            })
+            .collect();
+
+        let project_list = List::new(project_items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Select Project to Assign"),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol(">> ");
+
+        f.render_stateful_widget(project_list, chunks[0], &mut self.project_selector_state);
+
+        let mut help_spans = vec![
+            Span::styled("Controls: ", Style::default().fg(Color::Yellow)),
+            Span::raw("↑↓/jk: Navigate  │  /: Search  │  Enter: Select  │  p/Esc: Cancel"),
+        ];
+
+        if !self.project_search_query.is_empty() {
+            help_spans.push(Span::raw("  │  "));
+            help_spans.push(Span::styled("Search: ", Style::default().fg(Color::Cyan)));
+            help_spans.push(Span::styled(
+                &self.project_search_query,
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+
+        let help_text = Line::from(help_spans);
+
+        let help_para = Paragraph::new(help_text)
+            .style(Style::default().fg(Color::Gray))
+            .block(Block::default().borders(Borders::ALL));
+
+        f.render_widget(help_para, chunks[1]);
+    }
+
     fn render_footer(&self, f: &mut Frame, area: Rect) {
         let grouping_status = if self.show_grouped { "ON" } else { "OFF" };
         let day_grouping_status = if self.group_by_day { "ON" } else { "OFF" };
@@ -638,6 +1144,8 @@ impl App {
                 Span::raw(format!("r:Round({}) ", rounding_status)),
                 Span::raw("f:Filter "),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::raw("p:Project "),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
                 Span::raw("y:Copy "),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
                 Span::raw("q/Esc:Quit"),
@@ -669,6 +1177,18 @@ impl App {
                     msg,
                     Style::default()
                         .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        }
+
+        if let Some(ref msg) = self.status_message {
+            footer_lines.push(Line::from(vec![
+                Span::styled("Status: ", Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    msg,
+                    Style::default()
+                        .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 ),
             ]));
