@@ -1007,6 +1007,8 @@ impl App {
                 Span::raw(format!("r:Round({}) ", rounding_status)),
                 Span::raw("f:Filter "),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::raw("p:Project "),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
                 Span::raw("y:Copy "),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
                 Span::raw("q/Esc:Quit"),
