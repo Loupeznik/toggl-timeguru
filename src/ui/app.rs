@@ -115,6 +115,37 @@ impl App {
             match key.code {
                 KeyCode::Esc | KeyCode::Char('p') => {
                     self.show_project_selector = false;
+                    self.project_search_query.clear();
+                    self.reset_filtered_projects();
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.next_project();
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.previous_project();
+                }
+                KeyCode::PageDown => {
+                    self.page_down_project();
+                }
+                KeyCode::PageUp => {
+                    self.page_up_project();
+                }
+                KeyCode::Home => {
+                    self.goto_first_project();
+                }
+                KeyCode::End => {
+                    self.goto_last_project();
+                }
+                KeyCode::Char('/') => {
+                    self.start_project_search();
+                }
+                KeyCode::Char(c) if !self.project_search_query.is_empty() => {
+                    self.project_search_query.push(c);
+                    self.filter_projects();
+                }
+                KeyCode::Backspace if !self.project_search_query.is_empty() => {
+                    self.project_search_query.pop();
+                    self.filter_projects();
                 }
                 _ => {}
             }
@@ -410,6 +441,128 @@ impl App {
         }
     }
 
+    fn next_project(&mut self) {
+        let len = self.filtered_projects.len();
+        if len == 0 {
+            return;
+        }
+
+        let i = match self.project_selector_state.selected() {
+            Some(i) => {
+                if i >= len - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.project_selector_state.select(Some(i));
+    }
+
+    fn previous_project(&mut self) {
+        let len = self.filtered_projects.len();
+        if len == 0 {
+            return;
+        }
+
+        let i = match self.project_selector_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    len - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.project_selector_state.select(Some(i));
+    }
+
+    fn page_down_project(&mut self) {
+        let len = self.filtered_projects.len();
+        if len == 0 {
+            return;
+        }
+
+        let page_size = 10;
+        let i = match self.project_selector_state.selected() {
+            Some(i) => {
+                let new_pos = i + page_size;
+                if new_pos >= len {
+                    len - 1
+                } else {
+                    new_pos
+                }
+            }
+            None => 0,
+        };
+        self.project_selector_state.select(Some(i));
+    }
+
+    fn page_up_project(&mut self) {
+        let len = self.filtered_projects.len();
+        if len == 0 {
+            return;
+        }
+
+        let page_size = 10;
+        let i = match self.project_selector_state.selected() {
+            Some(i) => i.saturating_sub(page_size),
+            None => 0,
+        };
+        self.project_selector_state.select(Some(i));
+    }
+
+    fn goto_first_project(&mut self) {
+        if !self.filtered_projects.is_empty() {
+            self.project_selector_state.select(Some(0));
+        }
+    }
+
+    fn goto_last_project(&mut self) {
+        let len = self.filtered_projects.len();
+        if len > 0 {
+            self.project_selector_state.select(Some(len - 1));
+        }
+    }
+
+    fn start_project_search(&mut self) {
+        self.project_search_query.push('/');
+    }
+
+    fn filter_projects(&mut self) {
+        let query = self.project_search_query.trim_start_matches('/').to_lowercase();
+
+        if query.is_empty() {
+            self.reset_filtered_projects();
+            return;
+        }
+
+        let all_projects: Vec<_> = self.projects.values().cloned().collect();
+        self.filtered_projects = all_projects
+            .into_iter()
+            .filter(|p| p.name.to_lowercase().contains(&query))
+            .collect();
+
+        self.filtered_projects.sort_by(|a, b| a.name.cmp(&b.name));
+
+        if !self.filtered_projects.is_empty() {
+            self.project_selector_state.select(Some(0));
+        } else {
+            self.project_selector_state.select(None);
+        }
+    }
+
+    fn reset_filtered_projects(&mut self) {
+        self.filtered_projects = self.projects.values().cloned().collect();
+        self.filtered_projects.sort_by(|a, b| a.name.cmp(&b.name));
+
+        if !self.filtered_projects.is_empty() {
+            self.project_selector_state.select(Some(0));
+        }
+    }
+
     fn ui(&mut self, f: &mut Frame) {
         if self.show_project_selector {
             let chunks = Layout::default()
@@ -702,10 +855,23 @@ impl App {
 
         f.render_stateful_widget(project_list, chunks[0], &mut self.project_selector_state);
 
-        let help_text = Line::from(vec![
+        let mut help_spans = vec![
             Span::styled("Controls: ", Style::default().fg(Color::Yellow)),
-            Span::raw("↑↓/jk: Navigate  │  Enter: Select  │  p/Esc: Cancel"),
-        ]);
+            Span::raw("↑↓/jk: Navigate  │  /: Search  │  Enter: Select  │  p/Esc: Cancel"),
+        ];
+
+        if !self.project_search_query.is_empty() {
+            help_spans.push(Span::raw("  │  "));
+            help_spans.push(Span::styled("Search: ", Style::default().fg(Color::Cyan)));
+            help_spans.push(Span::styled(
+                &self.project_search_query,
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+
+        let help_text = Line::from(help_spans);
 
         let help_para = Paragraph::new(help_text)
             .style(Style::default().fg(Color::Gray))
