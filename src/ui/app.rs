@@ -575,17 +575,27 @@ impl App {
     }
 
     fn assign_project_to_entry(&mut self) {
+        tracing::info!("assign_project_to_entry called");
+
         let selected_project_idx = match self.project_selector_state.selected() {
-            Some(idx) => idx,
+            Some(idx) => {
+                tracing::debug!("Selected project index: {}", idx);
+                idx
+            }
             None => {
+                tracing::warn!("No project selected");
                 self.status_message = Some("No project selected".to_string());
                 return;
             }
         };
 
         let selected_project = match self.filtered_projects.get(selected_project_idx) {
-            Some(project) => project,
+            Some(project) => {
+                tracing::debug!("Selected project: {} (id: {})", project.name, project.id);
+                project
+            }
             None => {
+                tracing::error!("Invalid project selection index: {}", selected_project_idx);
                 self.status_message = Some("Invalid project selection".to_string());
                 return;
             }
@@ -595,66 +605,170 @@ impl App {
         let project_name = selected_project.name.clone();
 
         let selected_entry_idx = match self.list_state.selected() {
-            Some(idx) => idx,
+            Some(idx) => {
+                tracing::debug!("Selected entry index: {}", idx);
+                idx
+            }
             None => {
+                tracing::warn!("No time entry selected");
                 self.status_message = Some("No time entry selected".to_string());
                 return;
             }
         };
 
-        if self.show_grouped {
-            self.status_message =
-                Some("Use 'g' to toggle to individual view to assign projects".to_string());
-            return;
-        }
-
-        let entry = match self.time_entries.get(selected_entry_idx) {
-            Some(e) => e,
-            None => {
-                self.status_message = Some("Invalid entry selection".to_string());
-                return;
-            }
-        };
-
         let client = match &self.client {
-            Some(c) => c.clone(),
+            Some(c) => {
+                tracing::debug!("API client available");
+                c.clone()
+            }
             None => {
+                tracing::error!("API client not available");
                 self.status_message = Some("API client not available".to_string());
                 return;
             }
         };
 
-        let entry_id = entry.id;
-        let workspace_id = entry.workspace_id;
-
         let handle = match &self.runtime_handle {
-            Some(h) => h.clone(),
+            Some(h) => {
+                tracing::debug!("Runtime handle available");
+                h.clone()
+            }
             None => {
+                tracing::error!("Runtime handle not available");
                 self.status_message = Some("Runtime not available".to_string());
                 return;
             }
         };
-        match handle.block_on(client.update_time_entry_project(
-            workspace_id,
-            entry_id,
-            Some(project_id),
-        )) {
-            Ok(_updated_entry) => {
-                if let Some(entry_mut) = self.time_entries.get_mut(selected_entry_idx) {
-                    entry_mut.project_id = Some(project_id);
-                }
 
-                if let Some(all_entry) = self.all_entries.iter_mut().find(|e| e.id == entry_id) {
-                    all_entry.project_id = Some(project_id);
+        if self.show_grouped {
+            tracing::info!("Batch assignment for grouped entry");
+            let grouped_entry = match self.grouped_entries.get(selected_entry_idx) {
+                Some(e) => {
+                    tracing::debug!(
+                        "Grouped entry contains {} individual entries",
+                        e.entries.len()
+                    );
+                    e
                 }
+                None => {
+                    tracing::error!("Invalid grouped entry selection");
+                    self.status_message = Some("Invalid entry selection".to_string());
+                    return;
+                }
+            };
 
-                self.status_message = Some(format!("Assigned project: {}", project_name));
-                self.show_project_selector = false;
-                self.project_search_query.clear();
-                self.reset_filtered_projects();
+            let mut success_count = 0;
+            let mut fail_count = 0;
+            let total_entries = grouped_entry.entries.len();
+
+            for entry in &grouped_entry.entries {
+                tracing::debug!(
+                    "Assigning project {} to entry {} in workspace {}",
+                    project_id,
+                    entry.id,
+                    entry.workspace_id
+                );
+
+                match handle.block_on(client.update_time_entry_project(
+                    entry.workspace_id,
+                    entry.id,
+                    Some(project_id),
+                )) {
+                    Ok(_) => {
+                        tracing::debug!("Successfully assigned project to entry {}", entry.id);
+                        success_count += 1;
+
+                        if let Some(time_entry) =
+                            self.time_entries.iter_mut().find(|e| e.id == entry.id)
+                        {
+                            time_entry.project_id = Some(project_id);
+                        }
+
+                        if let Some(all_entry) =
+                            self.all_entries.iter_mut().find(|e| e.id == entry.id)
+                        {
+                            all_entry.project_id = Some(project_id);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to assign project to entry {}: {}", entry.id, e);
+                        fail_count += 1;
+                    }
+                }
             }
-            Err(e) => {
-                self.status_message = Some(format!("Failed to assign project: {}", e));
+
+            tracing::info!(
+                "Batch assignment complete: {} succeeded, {} failed out of {}",
+                success_count,
+                fail_count,
+                total_entries
+            );
+
+            if fail_count == 0 {
+                self.status_message = Some(format!(
+                    "Assigned {} to {} entries",
+                    project_name, success_count
+                ));
+            } else {
+                self.status_message = Some(format!(
+                    "Assigned {} to {}/{} entries ({} failed)",
+                    project_name, success_count, total_entries, fail_count
+                ));
+            }
+
+            self.recompute_grouped_entries();
+            self.show_project_selector = false;
+            self.project_search_query.clear();
+            self.reset_filtered_projects();
+        } else {
+            tracing::info!("Single entry assignment");
+            let entry = match self.time_entries.get(selected_entry_idx) {
+                Some(e) => {
+                    tracing::debug!(
+                        "Assigning project {} to entry {} in workspace {}",
+                        project_id,
+                        e.id,
+                        e.workspace_id
+                    );
+                    e
+                }
+                None => {
+                    tracing::error!("Invalid entry selection");
+                    self.status_message = Some("Invalid entry selection".to_string());
+                    return;
+                }
+            };
+
+            let entry_id = entry.id;
+            let workspace_id = entry.workspace_id;
+
+            tracing::debug!("Calling API to update time entry project");
+            match handle.block_on(client.update_time_entry_project(
+                workspace_id,
+                entry_id,
+                Some(project_id),
+            )) {
+                Ok(_updated_entry) => {
+                    tracing::info!("Successfully assigned project to entry {}", entry_id);
+
+                    if let Some(entry_mut) = self.time_entries.get_mut(selected_entry_idx) {
+                        entry_mut.project_id = Some(project_id);
+                    }
+
+                    if let Some(all_entry) = self.all_entries.iter_mut().find(|e| e.id == entry_id)
+                    {
+                        all_entry.project_id = Some(project_id);
+                    }
+
+                    self.status_message = Some(format!("Assigned project: {}", project_name));
+                    self.show_project_selector = false;
+                    self.project_search_query.clear();
+                    self.reset_filtered_projects();
+                }
+                Err(e) => {
+                    tracing::error!("Failed to assign project: {}", e);
+                    self.status_message = Some(format!("Failed to assign project: {}", e));
+                }
             }
         }
     }
