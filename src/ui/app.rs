@@ -17,6 +17,8 @@ use crate::toggl::models::{GroupedTimeEntry, Project, TimeEntry};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+const PAGE_SIZE: usize = 10;
+
 pub struct App {
     pub time_entries: Vec<TimeEntry>,
     pub grouped_entries: Vec<GroupedTimeEntry>,
@@ -35,13 +37,9 @@ pub struct App {
     pub active_filter: TimeEntryFilter,
     pub clipboard_message: Option<String>,
     pub show_project_selector: bool,
-    #[allow(dead_code)]
     pub project_selector_state: ListState,
-    #[allow(dead_code)]
     pub project_search_query: String,
-    #[allow(dead_code)]
     pub filtered_projects: Vec<Project>,
-    #[allow(dead_code)]
     pub status_message: Option<String>,
     pub client: Option<Arc<TogglClient>>,
     pub runtime_handle: Option<tokio::runtime::Handle>,
@@ -366,7 +364,7 @@ impl App {
             return;
         }
 
-        let page_size = 10;
+        let page_size = PAGE_SIZE;
         let i = match self.list_state.selected() {
             Some(i) => {
                 let new_pos = i + page_size;
@@ -388,7 +386,7 @@ impl App {
             return;
         }
 
-        let page_size = 10;
+        let page_size = PAGE_SIZE;
         let i = match self.list_state.selected() {
             Some(i) => i.saturating_sub(page_size),
             None => 0,
@@ -497,7 +495,7 @@ impl App {
             return;
         }
 
-        let page_size = 10;
+        let page_size = PAGE_SIZE;
         let i = match self.project_selector_state.selected() {
             Some(i) => {
                 let new_pos = i + page_size;
@@ -514,7 +512,7 @@ impl App {
             return;
         }
 
-        let page_size = 10;
+        let page_size = PAGE_SIZE;
         let i = match self.project_selector_state.selected() {
             Some(i) => i.saturating_sub(page_size),
             None => 0,
