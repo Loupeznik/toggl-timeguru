@@ -13,7 +13,9 @@ use ratatui::{
 
 use crate::processor::TimeEntryFilter;
 use crate::toggl::models::{GroupedTimeEntry, Project, TimeEntry};
+use crate::toggl::TogglClient;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub struct App {
     pub time_entries: Vec<TimeEntry>,
@@ -41,6 +43,7 @@ pub struct App {
     pub filtered_projects: Vec<Project>,
     #[allow(dead_code)]
     pub status_message: Option<String>,
+    pub client: Option<Arc<TogglClient>>,
 }
 
 impl App {
@@ -50,6 +53,7 @@ impl App {
         end_date: DateTime<Utc>,
         round_minutes: Option<i64>,
         projects: Vec<Project>,
+        client: Option<Arc<TogglClient>>,
     ) -> Self {
         let mut list_state = ListState::default();
         if !time_entries.is_empty() {
@@ -89,6 +93,7 @@ impl App {
             project_search_query: String::new(),
             filtered_projects,
             status_message: None,
+            client,
         }
     }
 
@@ -117,6 +122,9 @@ impl App {
                     self.show_project_selector = false;
                     self.project_search_query.clear();
                     self.reset_filtered_projects();
+                }
+                KeyCode::Enter => {
+                    self.assign_project_to_entry();
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
                     self.next_project();
@@ -563,6 +571,90 @@ impl App {
         }
     }
 
+    fn assign_project_to_entry(&mut self) {
+        let selected_project_idx = match self.project_selector_state.selected() {
+            Some(idx) => idx,
+            None => {
+                self.status_message = Some("No project selected".to_string());
+                return;
+            }
+        };
+
+        let selected_project = match self.filtered_projects.get(selected_project_idx) {
+            Some(project) => project,
+            None => {
+                self.status_message = Some("Invalid project selection".to_string());
+                return;
+            }
+        };
+
+        let project_id = selected_project.id;
+        let project_name = selected_project.name.clone();
+
+        let selected_entry_idx = match self.list_state.selected() {
+            Some(idx) => idx,
+            None => {
+                self.status_message = Some("No time entry selected".to_string());
+                return;
+            }
+        };
+
+        if self.show_grouped {
+            self.status_message =
+                Some("Use 'g' to toggle to individual view to assign projects".to_string());
+            return;
+        }
+
+        let entry = match self.time_entries.get(selected_entry_idx) {
+            Some(e) => e,
+            None => {
+                self.status_message = Some("Invalid entry selection".to_string());
+                return;
+            }
+        };
+
+        let client = match &self.client {
+            Some(c) => c.clone(),
+            None => {
+                self.status_message = Some("API client not available".to_string());
+                return;
+            }
+        };
+
+        let entry_id = entry.id;
+        let workspace_id = entry.workspace_id;
+
+        let handle = tokio::runtime::Handle::current();
+        match handle.block_on(client.update_time_entry_project(
+            workspace_id,
+            entry_id,
+            Some(project_id),
+        )) {
+            Ok(_updated_entry) => {
+                if let Some(entry_mut) = self.time_entries.get_mut(selected_entry_idx) {
+                    entry_mut.project_id = Some(project_id);
+                }
+
+                if let Some(all_entry) = self
+                    .all_entries
+                    .iter_mut()
+                    .find(|e| e.id == entry_id)
+                {
+                    all_entry.project_id = Some(project_id);
+                }
+
+                self.status_message =
+                    Some(format!("Assigned project: {}", project_name));
+                self.show_project_selector = false;
+                self.project_search_query.clear();
+                self.reset_filtered_projects();
+            }
+            Err(e) => {
+                self.status_message = Some(format!("Failed to assign project: {}", e));
+            }
+        }
+    }
+
     fn ui(&mut self, f: &mut Frame) {
         if self.show_project_selector {
             let chunks = Layout::default()
@@ -946,6 +1038,18 @@ impl App {
                     msg,
                     Style::default()
                         .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        }
+
+        if let Some(ref msg) = self.status_message {
+            footer_lines.push(Line::from(vec![
+                Span::styled("Status: ", Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    msg,
+                    Style::default()
+                        .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 ),
             ]));

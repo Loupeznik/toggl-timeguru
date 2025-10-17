@@ -273,7 +273,7 @@ async fn handle_sync(
 async fn handle_tui(
     start: Option<String>,
     end: Option<String>,
-    _cli_api_token: Option<String>,
+    cli_api_token: Option<String>,
 ) -> Result<()> {
     let config = Config::load()?;
     let db = Database::new(None)?;
@@ -301,6 +301,14 @@ async fn handle_tui(
 
     let projects = db.get_projects().unwrap_or_default();
 
+    let client = match get_api_token(cli_api_token, &config) {
+        Ok(token) => match TogglClient::new(token) {
+            Ok(c) => Some(std::sync::Arc::new(c)),
+            Err(_) => None,
+        },
+        Err(_) => None,
+    };
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -313,6 +321,7 @@ async fn handle_tui(
         end_date,
         config.round_duration_minutes,
         projects,
+        client,
     );
     let grouped = group_by_description(app.time_entries.clone());
     app.grouped_entries = grouped;
