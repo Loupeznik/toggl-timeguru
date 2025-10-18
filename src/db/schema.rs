@@ -33,6 +33,11 @@ pub fn init_database(conn: &Connection) -> Result<()> {
     )?;
 
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id)",
+        [],
+    )?;
+
+    conn.execute(
         "CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY,
             workspace_id INTEGER NOT NULL,

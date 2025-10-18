@@ -28,3 +28,6 @@ target
 /target
 
 /release-artifacts
+
+# Test CSV exports
+*.csv

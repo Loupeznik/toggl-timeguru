@@ -43,9 +43,11 @@ pub struct App {
     pub status_message: Option<String>,
     pub client: Option<Arc<TogglClient>>,
     pub runtime_handle: Option<tokio::runtime::Handle>,
+    pub current_user_email: Option<String>,
 }
 
 impl App {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         time_entries: Vec<TimeEntry>,
         start_date: DateTime<Utc>,
@@ -54,6 +56,7 @@ impl App {
         projects: Vec<Project>,
         client: Option<Arc<TogglClient>>,
         runtime_handle: Option<tokio::runtime::Handle>,
+        current_user_email: Option<String>,
     ) -> Self {
         let mut list_state = ListState::default();
         if !time_entries.is_empty() {
@@ -96,6 +99,7 @@ impl App {
             status_message: None,
             client,
             runtime_handle,
+            current_user_email,
         }
     }
 
@@ -844,11 +848,20 @@ impl App {
     }
 
     fn render_header(&self, f: &mut Frame, area: Rect) {
-        let title = format!(
-            "Toggl TimeGuru - {} to {}",
-            self.start_date.format("%Y-%m-%d"),
-            self.end_date.format("%Y-%m-%d")
-        );
+        let title = if let Some(ref email) = self.current_user_email {
+            format!(
+                "Toggl TimeGuru - {} to {} [{}]",
+                self.start_date.format("%Y-%m-%d"),
+                self.end_date.format("%Y-%m-%d"),
+                email
+            )
+        } else {
+            format!(
+                "Toggl TimeGuru - {} to {}",
+                self.start_date.format("%Y-%m-%d"),
+                self.end_date.format("%Y-%m-%d")
+            )
+        };
 
         let header = Paragraph::new(title)
             .style(Style::default().fg(Color::Cyan))

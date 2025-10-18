@@ -38,9 +38,11 @@ impl TogglClient {
         format!("Basic {}", encoded)
     }
 
-    #[allow(dead_code)]
     pub async fn get_current_user(&self) -> Result<serde_json::Value> {
         let url = format!("{}/me", self.base_url);
+
+        info!("Fetching current user information from Toggl API");
+        debug!("API URL: {}", url);
 
         let response = self
             .client
@@ -56,15 +58,38 @@ impl TogglClient {
                     .json::<serde_json::Value>()
                     .await
                     .context("Failed to parse user response")?;
+                info!("Successfully fetched user information");
+                debug!("User data: {:?}", user);
                 Ok(user)
             }
             StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => {
+                error!("Authentication failed when fetching current user");
                 anyhow::bail!("Authentication failed. Please check your API token.")
             }
             status => {
+                error!("Unexpected response status when fetching user: {}", status);
                 anyhow::bail!("Unexpected response status: {}", status)
             }
         }
+    }
+
+    pub async fn get_current_user_id(&self) -> Result<i64> {
+        let user = self.get_current_user().await?;
+        let user_id = user["id"]
+            .as_i64()
+            .context("Failed to extract user_id from API response")?;
+        info!("Current user_id: {}", user_id);
+        Ok(user_id)
+    }
+
+    pub async fn get_current_user_email(&self) -> Result<String> {
+        let user = self.get_current_user().await?;
+        let email = user["email"]
+            .as_str()
+            .context("Failed to extract email from API response")?
+            .to_string();
+        info!("Current user email: {}", email);
+        Ok(email)
     }
 
     pub async fn get_time_entries(

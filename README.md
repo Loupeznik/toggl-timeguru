@@ -6,9 +6,13 @@ A powerful CLI tool for managing and analyzing Toggl Track time entries, built w
 
 - **Sync time entries** from Toggl Track to local SQLite database
 - **Interactive TUI** for browsing time entries with vim-style navigation
-- **Group entries** by description with automatic duration summation
-- **Filter entries** by date range, project, and tags
+- **Project assignment** directly from TUI with search and batch operations
+- **Group entries** by description or by description within each day
+- **Filter entries** by date range (project and tag filtering via CLI only)
+- **CSV export** with grouping options for external reporting
 - **Duration rounding** (rounds up to next interval) for easy time reporting
+- **Multi-account support** with automatic account detection and switching
+- **Data management** CLI commands for cleaning database and config
 - **Offline support** via local caching
 - **Fast and efficient** native Rust performance
 
@@ -106,9 +110,47 @@ toggl-timeguru tui --start 2025-01-01 --end 2025-01-31
 **TUI Keyboard Shortcuts:**
 - `↑`/`k` - Move up
 - `↓`/`j` - Move down
-- `g` - Toggle grouping on/off
+- `PageUp`/`PageDown` - Jump by page
+- `Home`/`End` - Jump to first/last entry
+- `g` - Toggle grouping by description
+- `d` - Toggle day-based grouping (groups by description within each day)
+- `s` - Toggle date sorting (ascending/descending)
 - `r` - Toggle rounding on/off (default: ON in grouped view)
+- `p` - Open project selector to assign project (works on individual or grouped entries)
+- `y` - Copy selected entry description to clipboard
 - `q`/`Esc` - Quit
+
+#### `export` - Export time entries to CSV
+
+```bash
+# Export entries to CSV (individual entries)
+toggl-timeguru export --start 2025-01-01 --end 2025-01-31 --output report.csv
+
+# Export with grouping by description
+toggl-timeguru export --output report.csv --group
+
+# Export with day-based grouping (groups by description within each day)
+toggl-timeguru export --output report.csv --group-by-day
+
+# Include metadata header (date range, user email, entry count)
+toggl-timeguru export --output report.csv --include-metadata
+```
+
+#### `clean` - Delete application data
+
+```bash
+# Delete all data (database + config)
+toggl-timeguru clean --all
+
+# Delete only database (keeps config)
+toggl-timeguru clean --data
+
+# Delete only configuration (keeps database)
+toggl-timeguru clean --config
+
+# Skip confirmation prompt (useful for automation)
+toggl-timeguru clean --all --confirm
+```
 
 ### Global Options
 
@@ -158,11 +200,13 @@ Remove-Item -Recurse -Force "$env:APPDATA\toggl-timeguru"
 - **Linux**: `rm -rf ~/.config/toggl-timeguru/`
 - **Windows**: `Remove-Item -Recurse -Force "$env:APPDATA\toggl-timeguru\config.toml"`
 
-### Known Limitations
+### Multi-Account Support
 
-1. **Multiple Accounts**: The application currently does not support multiple Toggl accounts. When switching API tokens, manually delete the database first (see above) to avoid mixing data from different accounts.
-
-2. **Data Management**: There is currently no CLI command to reset or clean application data. This feature is planned for a future release.
+The application automatically detects when you switch between Toggl API tokens (different accounts):
+- Database entries are automatically filtered by user_id
+- The TUI displays your current account email in the header
+- When switching accounts, you'll see a helpful message with cleanup instructions
+- Use `toggl-timeguru clean --data` to remove old account data if needed
 
 ## Development
 
@@ -225,11 +269,15 @@ See [docs/PROGRESS.md](docs/PROGRESS.md) for detailed development progress.
 - ✅ Time entry grouping and filtering
 - ✅ Configuration management
 
-### Phase 2: Enhanced Functionality
-- Advanced filtering (project, tags, client)
+### Phase 2: Enhanced Functionality (In Progress)
+- ✅ Advanced filtering (CLI only - project, tags via list command)
+- ✅ CSV export with grouping options
+- ✅ Enhanced UI with better navigation
+- ✅ Project assignment in TUI
+- ✅ Multi-account support
+- ✅ Data management CLI
+- Interactive TUI filtering (project, tags, client)
 - Report generation (daily, weekly, monthly)
-- CSV export
-- Enhanced UI with better navigation
 - Fuzzy description matching
 - Incremental sync
 

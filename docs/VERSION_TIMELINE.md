@@ -8,11 +8,12 @@
 - Basic CLI commands
 
 ## v1.1.0 - Advanced Filtering & Enhanced UI ✅ COMPLETED
-### Advanced Filtering
-- [x] Add project-based filtering
-- [x] Implement tag-based filtering
-- [x] Add client-based filtering
+### Advanced Filtering (CLI Only)
+- [x] Add project-based filtering (via `list --project` command)
+- [x] Implement tag-based filtering (via `list --tag` command)
+- [x] Add client-based filtering (backend support in TimeEntryFilter)
 - [x] Create filter combination logic (TimeEntryFilter builder)
+- Note: TUI filtering UI not implemented yet (planned for v1.1.2)
 
 ### Enhanced UI
 - [x] Improve navigation (page up/down, home/end)
@@ -50,34 +51,43 @@
 ### Quick Win Features
 - [x] Add clipboard copy functionality for time entry descriptions (hotkey 'y')
 
-## v1.1.1 - Project Assignment & Data Management (IN PROGRESS)
+## v1.1.1 - Project Assignment & Data Management ✅ COMPLETED
 ### Project Assignment Feature ✅ COMPLETED
 - [x] Implement TUI project selector panel
 - [x] Add project assignment for individual time entries (hotkey 'p')
 - [x] Add project search functionality (hotkey '/')
 - [x] Add navigation shortcuts (j/k, PageUp/PageDown, Home/End)
-- [x] Batch assignment note: Shows message to toggle to individual view
+- [x] Batch assignment support for grouped entries
 - [x] API support: update_time_entry_project() method added
-- [x] Async/sync integration: Using Arc<TogglClient> with Handle::block_on()
+- [x] Async/sync integration: Using Arc<TogglClient> with Handle::spawn()
 
-### Data Management & Multi-Account Support (PLANNED)
-- [ ] Add CLI command for data deletion (`toggl-timeguru clean`)
-  - [ ] `clean --all` - Delete database + config
-  - [ ] `clean --data` - Delete only database
-  - [ ] `clean --config` - Delete only config
-  - [ ] `clean --confirm` - Skip confirmation prompt
-- [ ] Implement multi-account support
-  - [ ] Store user_id with database entries
-  - [ ] Add account switching mechanism
-  - [ ] Separate databases per account OR add account filtering
-  - [ ] Visual indicator in TUI showing current account
+### Data Management & Multi-Account Support ✅ COMPLETED
+- [x] Add CLI command for data deletion (`toggl-timeguru clean`)
+  - [x] `clean --all` - Delete database + config
+  - [x] `clean --data` - Delete only database
+  - [x] `clean --config` - Delete only config
+  - [x] `clean --confirm` - Skip confirmation prompt
+- [x] Implement multi-account support
+  - [x] Store user_id with database entries
+  - [x] Add user_id index for better query performance
+  - [x] Filter database queries by user_id
+  - [x] Visual indicator in TUI showing current account (displays email)
+  - [x] Auto-detect account switching with improved messages
 
-### Data Export (PLANNED)
-- [ ] Implement CSV export using csv crate
-- [ ] Add customizable CSV format options
-- [ ] Include metadata in exports (date range, filters)
+### Data Export ✅ COMPLETED
+- [x] Implement CSV export using csv crate
+- [x] Add customizable CSV format options (grouped vs individual)
+- [x] Add day-based grouped export format (--group-by-day)
+- [x] Include metadata in exports (date range, user_id, entry count)
 
-## v1.1.2 - CI/CD & Build Automation (PLANNED)
+## v1.1.2 - TUI Filtering & CI/CD (PLANNED)
+### Interactive TUI Filtering
+- [ ] Add project filtering UI to TUI filter panel
+- [ ] Add tag filtering UI to TUI filter panel
+- [ ] Add client filtering UI to TUI filter panel
+- [ ] Add filter persistence across TUI sessions
+- [ ] Add visual indicators for active filters in entry list
+
 ### CI/CD & Build Automation
 - [ ] Set up GitHub Actions workflow
 - [ ] Configure multi-platform builds (Linux/macOS/Windows × amd64/arm64)
@@ -94,25 +104,23 @@
 - [ ] Add project-specific reports
 - [ ] Calculate billable vs non-billable hours
 
-## v1.1.2 - Fuzzy Matching & Caching (PLANNED)
+## v1.1.3 - Fuzzy Matching & Incremental Sync (PLANNED)
 ### Fuzzy Matching
 - [ ] Integrate strsim or fuzzy-matcher crate
 - [ ] Implement similar description matching
 - [ ] Add similarity threshold configuration
 - [ ] Create preview for fuzzy matches before grouping
 
-### Local Caching
-- [ ] Implement sync mechanism for time entries
-- [ ] Add last sync timestamp tracking
-- [ ] Create offline mode support
-- [ ] Implement incremental sync (only fetch new entries)
+### Incremental Sync
+- [ ] Implement incremental sync (only fetch new entries since last sync)
 - [ ] Add cache invalidation logic
+- [ ] Optimize sync performance for large date ranges
 
-## v1.1.3-v1.1.5 - Remaining Features (PLANNED)
-### Report Selection Interface (v1.1.3)
+## v1.1.4+ - Remaining Phase 2 Features (PLANNED)
+### Report Selection Interface
 - [ ] Create report selection interface in TUI
 
-### Additional Enhancements (v1.1.4-v1.1.5)
+### Additional Enhancements
 - Any remaining Phase 2 tasks not yet completed
 - Bug fixes and refinements based on user feedback
 - Performance optimizations

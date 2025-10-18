@@ -7,6 +7,8 @@ pub struct Config {
     pub preferred_report_format: ReportFormat,
     pub api_token_encrypted: Option<Vec<u8>>,
     pub round_duration_minutes: Option<i64>,
+    pub current_user_id: Option<i64>,
+    pub current_user_email: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -22,6 +24,8 @@ impl Default for Config {
             preferred_report_format: ReportFormat::Csv,
             api_token_encrypted: None,
             round_duration_minutes: Some(15),
+            current_user_id: None,
+            current_user_email: None,
         }
     }
 }
