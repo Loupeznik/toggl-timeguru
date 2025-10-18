@@ -19,7 +19,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use cli::{Cli, Commands};
 use config::Config;
 use db::Database;
-use processor::{filter_by_project, filter_by_tag, group_by_description};
+use processor::{filter_by_project, filter_by_tag, group_by_description, group_by_description_and_day};
 use toggl::TogglClient;
 use ui::App;
 
@@ -89,7 +89,8 @@ async fn main() -> Result<()> {
                 output,
                 include_metadata,
                 group,
-            } => handle_export(start, end, output, include_metadata, group).await?,
+                group_by_day,
+            } => handle_export(start, end, output, include_metadata, group, group_by_day).await?,
         }
     } else {
         println!("Toggl TimeGuru - Use --help for usage information");
@@ -293,18 +294,19 @@ async fn handle_sync(
     let db = Database::new(None)?;
 
     let user_id = client.get_current_user_id().await?;
+    let user_email = client.get_current_user_email().await?;
+
     if config.current_user_id.is_none() {
         config.current_user_id = Some(user_id);
+        config.current_user_email = Some(user_email.clone());
         config.save()?;
-        println!("Configured for user_id: {}", user_id);
+        println!("Configured for user: {}", user_email);
     } else if config.current_user_id != Some(user_id) {
-        println!(
-            "Warning: API token belongs to user_id {} but config has user_id {:?}",
-            user_id, config.current_user_id
-        );
-        println!("Switching to new user account. Previous data will not be visible.");
+        println!("Switching to new user account: {}", user_email);
+        println!("Previous data will not be visible.");
         println!("Use 'toggl-timeguru clean --data' to remove old data if needed.");
         config.current_user_id = Some(user_id);
+        config.current_user_email = Some(user_email);
         config.save()?;
     }
 
@@ -403,7 +405,7 @@ async fn handle_tui(
         projects,
         client,
         runtime_handle,
-        config.current_user_id,
+        config.current_user_email.clone(),
     );
     let grouped = group_by_description(app.time_entries.clone());
     app.grouped_entries = grouped;
@@ -526,6 +528,7 @@ async fn handle_export(
     output: String,
     include_metadata: bool,
     group: bool,
+    group_by_day: bool,
 ) -> Result<()> {
     use std::fs::File;
 
@@ -581,15 +584,31 @@ async fn handle_export(
         wtr.write_record(["", "", "", "", ""])?;
     }
 
-    if group {
-        let grouped = group_by_description(entries);
-        wtr.write_record([
-            "Description",
-            "Project",
-            "Duration (hours)",
-            "Entry Count",
-            "Billable",
-        ])?;
+    if group || group_by_day {
+        let grouped = if group_by_day {
+            group_by_description_and_day(entries)
+        } else {
+            group_by_description(entries)
+        };
+
+        if group_by_day {
+            wtr.write_record([
+                "Date",
+                "Description",
+                "Project",
+                "Duration (hours)",
+                "Entry Count",
+                "Billable",
+            ])?;
+        } else {
+            wtr.write_record([
+                "Description",
+                "Project",
+                "Duration (hours)",
+                "Entry Count",
+                "Billable",
+            ])?;
+        }
 
         for entry in grouped {
             let desc = entry
@@ -614,13 +633,28 @@ async fn handle_export(
                 "Mixed"
             };
 
-            wtr.write_record([
-                &desc,
-                &project_name,
-                &format!("{:.2}", hours),
-                &entry.entries.len().to_string(),
-                billable,
-            ])?;
+            if group_by_day {
+                let date_str = entry
+                    .date
+                    .map(|d| d.format("%Y-%m-%d").to_string())
+                    .unwrap_or_else(|| String::new());
+                wtr.write_record([
+                    &date_str,
+                    &desc,
+                    &project_name,
+                    &format!("{:.2}", hours),
+                    &entry.entries.len().to_string(),
+                    billable,
+                ])?;
+            } else {
+                wtr.write_record([
+                    &desc,
+                    &project_name,
+                    &format!("{:.2}", hours),
+                    &entry.entries.len().to_string(),
+                    billable,
+                ])?;
+            }
         }
     } else {
         wtr.write_record([

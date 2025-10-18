@@ -105,6 +105,9 @@ pub enum Commands {
 
         #[arg(long, help = "Group entries by description")]
         group: bool,
+
+        #[arg(long, help = "Group entries by description and day")]
+        group_by_day: bool,
     },
 }
 

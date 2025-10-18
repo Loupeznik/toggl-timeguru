@@ -82,6 +82,16 @@ impl TogglClient {
         Ok(user_id)
     }
 
+    pub async fn get_current_user_email(&self) -> Result<String> {
+        let user = self.get_current_user().await?;
+        let email = user["email"]
+            .as_str()
+            .context("Failed to extract email from API response")?
+            .to_string();
+        info!("Current user email: {}", email);
+        Ok(email)
+    }
+
     pub async fn get_time_entries(
         &self,
         start_date: DateTime<Utc>,
