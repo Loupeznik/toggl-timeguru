@@ -558,31 +558,40 @@ async fn handle_export(
         .with_context(|| format!("Failed to create output file: {}", output))?;
     let mut wtr = csv::Writer::from_writer(file);
 
+    let max_metadata_cols = 6;
+
     if include_metadata {
-        wtr.write_record(["# Toggl TimeGuru Export", "", "", "", ""])?;
-        wtr.write_record([
-            &format!(
-                "# Date Range: {} to {}",
-                start_date.format("%Y-%m-%d"),
-                end_date.format("%Y-%m-%d")
-            ),
-            "",
-            "",
-            "",
-            "",
-        ])?;
-        wtr.write_record([
-            &format!("# Total Entries: {}", entries.len()),
-            "",
-            "",
-            "",
-            "",
-        ])?;
-        if let Some(user_id) = config.current_user_id {
-            wtr.write_record([&format!("# User ID: {}", user_id), "", "", "", ""])?;
+        let mut row = vec![String::new(); max_metadata_cols];
+        row[0] = "# Toggl TimeGuru Export".to_string();
+        wtr.write_record(&row)?;
+
+        row.fill(String::new());
+        row[0] = format!(
+            "# Date Range: {} to {}",
+            start_date.format("%Y-%m-%d"),
+            end_date.format("%Y-%m-%d")
+        );
+        wtr.write_record(&row)?;
+
+        row.fill(String::new());
+        row[0] = format!("# Total Entries: {}", entries.len());
+        wtr.write_record(&row)?;
+
+        if let Some(user_email) = &config.current_user_email {
+            row.fill(String::new());
+            row[0] = format!("# User: {}", user_email);
+            wtr.write_record(&row)?;
         }
-        wtr.write_record(["", "", "", "", ""])?;
+
+        row.fill(String::new());
+        wtr.write_record(&row)?;
     }
+
+    let projects = db.get_projects().unwrap_or_default();
+    let project_map: std::collections::HashMap<i64, String> = projects
+        .into_iter()
+        .map(|p| (p.id, p.name))
+        .collect();
 
     if group || group_by_day {
         let grouped = if group_by_day {
@@ -617,8 +626,7 @@ async fn handle_export(
                 .unwrap_or_else(|| "(No description)".to_string());
             let project_name = entry
                 .project_id
-                .and_then(|pid| db.get_projects().ok()?.into_iter().find(|p| p.id == pid))
-                .map(|p| p.name)
+                .and_then(|pid| project_map.get(&pid).cloned())
                 .unwrap_or_else(String::new);
             let hours = if let Some(round_min) = config.round_duration_minutes {
                 entry.rounded_hours(round_min)
@@ -672,8 +680,7 @@ async fn handle_export(
                 .unwrap_or_else(|| "(No description)".to_string());
             let project_name = entry
                 .project_id
-                .and_then(|pid| db.get_projects().ok()?.into_iter().find(|p| p.id == pid))
-                .map(|p| p.name)
+                .and_then(|pid| project_map.get(&pid).cloned())
                 .unwrap_or_else(String::new);
             let hours = entry.duration as f64 / 3600.0;
             let billable = if entry.billable { "Yes" } else { "No" };
