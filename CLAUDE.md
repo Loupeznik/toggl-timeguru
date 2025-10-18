@@ -291,22 +291,17 @@ The TUI now supports project assignment for both individual and grouped time ent
 - Uses `Arc<TogglClient>` with `tokio::runtime::Handle::spawn()` + sync channels to call async API from sync TUI
 - See "CRITICAL: Calling Async Code from Sync TUI Context" section for implementation details
 
-## Known Issues and Limitations
+## v1.1.1 Implemented Features
 
-### 1. Multiple Account Support
-**Issue**: When switching between Toggl API tokens (different accounts), the local database retains data from both accounts, causing mixed data to appear in the TUI and list views.
+### Multi-Account Support ✅ IMPLEMENTED
+The application now supports multiple Toggl accounts with automatic detection:
+- User ID filtering in database queries (with index for performance)
+- Visual indicator in TUI showing current account email
+- Auto-detect account switching with helpful messages
+- Database data is automatically filtered by user_id
 
-**Workaround**: Manually delete the database before switching accounts (see "Manual Database Deletion" section above).
-
-**Future Enhancement**: Implement proper multi-account support with:
-- Account-specific database tables or separate database files
-- CLI command to switch between accounts
-- Visual indicator in TUI showing current account
-
-### 2. No CLI Command for Data Deletion
-**Issue**: Users cannot delete application data (database, config) via CLI commands. They must manually delete files using OS-specific commands.
-
-**Future Enhancement**: Add a `clean` or `reset` command:
+### Data Management CLI ✅ IMPLEMENTED
+The `clean` command allows safe deletion of application data:
 ```bash
 toggl-timeguru clean --all          # Delete database + config
 toggl-timeguru clean --data         # Delete only database
@@ -314,7 +309,16 @@ toggl-timeguru clean --config       # Delete only config
 toggl-timeguru clean --confirm      # Skip confirmation prompt
 ```
 
-This would provide a safer, cross-platform way to manage application data.
+### CSV Export with Day-based Grouping ✅ IMPLEMENTED
+CSV export now supports multiple grouping options:
+```bash
+toggl-timeguru export --output file.csv --group           # Group by description
+toggl-timeguru export --output file.csv --group-by-day    # Group by description within each day
+```
+
+## Known Issues and Limitations
+
+No major known issues at this time. Please report any bugs via GitHub issues.
 
 ## Development Workflow
 

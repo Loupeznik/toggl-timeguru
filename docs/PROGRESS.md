@@ -96,13 +96,14 @@ This document tracks the development progress across all phases of the Toggl Tim
   - [x] Add user_id filtering to database queries
   - [x] Add user_id index for query performance
   - [x] Single database with account filtering
-  - [x] Add visual indicator in TUI showing current account
-  - [x] Auto-detect account switching with warnings
+  - [x] Add visual indicator in TUI showing current account (displays email)
+  - [x] Auto-detect account switching with improved messages
 - [x] Document database location and manual deletion procedures
 
 ### v1.1.1 CSV Export ✅ COMPLETED
 - [x] Implement CSV export using csv crate
 - [x] Add grouped export format
+- [x] Add day-based grouped export format (--group-by-day)
 - [x] Add individual entry export format
 - [x] Include optional metadata (date range, user_id, entry count)
 - [x] Support project name resolution in exports
@@ -116,11 +117,15 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [ ] Set up clippy and rustfmt checks in CI
 - [ ] Add code coverage reporting
 
-### Advanced Filtering ✅ COMPLETED (v1.1.0)
-- [x] Add project-based filtering
-- [x] Implement tag-based filtering
-- [x] Add client-based filtering
+### Advanced Filtering ✅ PARTIALLY COMPLETED (v1.1.0 - CLI Only)
+- [x] Add project-based filtering (CLI `list --project` command)
+- [x] Implement tag-based filtering (CLI `list --tag` command)
+- [x] Add client-based filtering (backend TimeEntryFilter support)
 - [x] Create filter combination logic
+- [ ] Add interactive TUI filter panel UI (planned for v1.1.2)
+- [ ] Add project filtering in TUI
+- [ ] Add tag filtering in TUI
+- [ ] Add client filtering in TUI
 
 ### Report Generation
 - [ ] Implement daily summary report
@@ -136,7 +141,7 @@ This document tracks the development progress across all phases of the Toggl Tim
 
 ### Enhanced UI ✅ PARTIALLY COMPLETED (v1.1.0)
 - [x] Improve navigation (page up/down, home/end)
-- [x] Add filter UI panel
+- [x] Add filter UI panel (billable filter only, full filtering planned for v1.1.2)
 - [ ] Create report selection interface
 - [x] Implement status bar with help hints
 - [ ] Add loading indicators for API calls
