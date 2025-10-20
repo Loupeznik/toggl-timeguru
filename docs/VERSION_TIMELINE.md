@@ -80,7 +80,24 @@
 - [x] Add day-based grouped export format (--group-by-day)
 - [x] Include metadata in exports (date range, user_id, entry count)
 
-## v1.1.2 - TUI Filtering & CI/CD (PLANNED)
+## v1.1.2 - TUI Enhancements & Time Tracking (PLANNED)
+### Data Persistence Improvements
+- [ ] Fix project assignment persistence (save to local DB immediately on assignment)
+- [ ] Update database record when project is assigned to time entry/group
+- [ ] Ensure TUI changes persist across sessions without manual sync
+
+### Time Tracking CLI
+- [ ] Create new `track` command for starting/stopping time entries
+- [ ] Add `track start` subcommand with `-m/--message` flag for description
+- [ ] Add `track stop` subcommand to end current time entry
+- [ ] Integrate with Toggl API for real-time tracking
+
+### TUI Time Entry Editing
+- [ ] Add time entry rename functionality in TUI (new hotkey)
+- [ ] Update description in both Toggl API and local database
+- [ ] Add visual feedback for rename success/failure
+- [ ] Support renaming in both individual and grouped views
+
 ### Interactive TUI Filtering
 - [ ] Add project filtering UI to TUI filter panel
 - [ ] Add tag filtering UI to TUI filter panel
@@ -88,14 +105,14 @@
 - [ ] Add filter persistence across TUI sessions
 - [ ] Add visual indicators for active filters in entry list
 
-### CI/CD & Build Automation
-- [ ] Set up GitHub Actions workflow
-- [ ] Configure multi-platform builds (Linux/macOS/Windows × amd64/arm64)
-- [ ] Add automated testing on push/PR
-- [ ] Implement automated GitHub Releases with binaries
-- [ ] Add binary stripping and compression for smaller downloads
-- [ ] Set up clippy and rustfmt checks in CI
-- [ ] Add code coverage reporting
+### CI/CD & Build Automation ✅ COMPLETED
+- [x] Set up GitHub Actions workflow
+- [x] Configure multi-platform builds (Linux/macOS/Windows × amd64/arm64)
+- [x] Add automated testing on push/PR
+- [x] Implement automated GitHub Releases with binaries
+- [x] Add binary stripping and compression for smaller downloads
+- [x] Set up clippy and rustfmt checks in CI
+- [x] Add code coverage reporting
 
 ### Report Generation
 - [ ] Implement daily summary report

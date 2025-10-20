@@ -108,14 +108,14 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [x] Include optional metadata (date range, user_id, entry count)
 - [x] Support project name resolution in exports
 
-### CI/CD & Build Automation (Priority)
-- [ ] Set up GitHub Actions workflow
-- [ ] Configure multi-platform builds (Linux/macOS/Windows × amd64/arm64)
-- [ ] Add automated testing on push/PR
-- [ ] Implement automated GitHub Releases with binaries
-- [ ] Add binary stripping and compression for smaller downloads
-- [ ] Set up clippy and rustfmt checks in CI
-- [ ] Add code coverage reporting
+### CI/CD & Build Automation ✅ COMPLETED (v1.1.2)
+- [x] Set up GitHub Actions workflow (.github/workflows/ci.yml)
+- [x] Configure multi-platform builds (Linux/macOS/Windows × amd64/arm64)
+- [x] Add automated testing on push/PR (test, clippy, fmt jobs)
+- [x] Implement automated GitHub Releases with binaries (.github/workflows/release.yml)
+- [x] Add binary stripping and compression for smaller downloads
+- [x] Set up clippy and rustfmt checks in CI
+- [x] Add code coverage reporting (cargo-tarpaulin + Codecov)
 
 ### Advanced Filtering ✅ PARTIALLY COMPLETED (v1.1.0 - CLI Only)
 - [x] Add project-based filtering (CLI `list --project` command)
@@ -126,6 +126,28 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [ ] Add project filtering in TUI
 - [ ] Add tag filtering in TUI
 - [ ] Add client filtering in TUI
+
+### v1.1.2 Data Persistence Improvements (PLANNED)
+- [ ] Fix project assignment persistence issue
+  - [ ] Update database record when project is assigned in TUI
+  - [ ] Ensure changes persist across TUI sessions without manual sync
+  - [ ] Use Database::update_time_entry_project() method
+
+### v1.1.2 Time Tracking CLI (PLANNED)
+- [ ] Create new `track` command in CLI
+  - [ ] Add `track start` subcommand with `-m/--message` flag for description
+  - [ ] Add `track stop` subcommand to end current running entry
+  - [ ] Integrate with Toggl API start_time_entry() and stop_time_entry()
+  - [ ] Add validation and error handling for API calls
+
+### v1.1.2 TUI Time Entry Editing (PLANNED)
+- [ ] Add time entry rename functionality in TUI
+  - [ ] Assign hotkey for rename action (e.g., 'e' for edit)
+  - [ ] Implement description input prompt/dialog
+  - [ ] Update description via Toggl API
+  - [ ] Save updated description to local database immediately
+  - [ ] Support renaming in both individual and grouped views
+  - [ ] Add visual feedback for success/failure
 
 ### Report Generation
 - [ ] Implement daily summary report

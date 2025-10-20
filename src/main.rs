@@ -19,7 +19,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use cli::{Cli, Commands};
 use config::Config;
 use db::Database;
-use processor::{filter_by_project, filter_by_tag, group_by_description, group_by_description_and_day};
+use processor::{
+    filter_by_project, filter_by_tag, group_by_description, group_by_description_and_day,
+};
 use toggl::TogglClient;
 use ui::App;
 
@@ -475,7 +477,10 @@ async fn handle_clean(all: bool, data: bool, config: bool, confirm: bool) -> Res
                 deleted_items.push(format!("Database: {}", db_path.display()));
                 let parent_dir = db_path.parent();
                 if let Some(dir) = parent_dir
-                    && dir.read_dir().map(|mut d| d.next().is_none()).unwrap_or(false)
+                    && dir
+                        .read_dir()
+                        .map(|mut d| d.next().is_none())
+                        .unwrap_or(false)
                 {
                     let _ = std::fs::remove_dir(dir);
                 }
@@ -492,7 +497,10 @@ async fn handle_clean(all: bool, data: bool, config: bool, confirm: bool) -> Res
                 deleted_items.push(format!("Config: {}", config_path.display()));
                 let parent_dir = config_path.parent();
                 if let Some(dir) = parent_dir
-                    && dir.read_dir().map(|mut d| d.next().is_none()).unwrap_or(false)
+                    && dir
+                        .read_dir()
+                        .map(|mut d| d.next().is_none())
+                        .unwrap_or(false)
                 {
                     let _ = std::fs::remove_dir(dir);
                 }
@@ -588,10 +596,8 @@ async fn handle_export(
     }
 
     let projects = db.get_projects().unwrap_or_default();
-    let project_map: std::collections::HashMap<i64, String> = projects
-        .into_iter()
-        .map(|p| (p.id, p.name))
-        .collect();
+    let project_map: std::collections::HashMap<i64, String> =
+        projects.into_iter().map(|p| (p.id, p.name)).collect();
 
     if group || group_by_day {
         let grouped = if group_by_day {
@@ -645,7 +651,7 @@ async fn handle_export(
                 let date_str = entry
                     .date
                     .map(|d| d.format("%Y-%m-%d").to_string())
-                    .unwrap_or_else(|| String::new());
+                    .unwrap_or_else(String::new);
                 wtr.write_record([
                     &date_str,
                     &desc,
