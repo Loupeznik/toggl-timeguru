@@ -20,6 +20,15 @@ jobs:
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
+      - name: Check if preview release
+        id: check_preview
+        run: |
+          if [[ "${{ github.ref_name }}" == *"preview"* ]]; then
+            echo "is_preview=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_preview=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -29,7 +38,7 @@ jobs:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref_name }}
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.check_preview.outputs.is_preview }}
 
   build:
     name: Build
