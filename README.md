@@ -1,7 +1,5 @@
 # Toggl TimeGuru
 
-[![CI](https://github.com/Loupeznik/toggl-timeguru/actions/workflows/ci.yml/badge.svg)](https://github.com/Loupeznik/toggl-timeguru/actions/workflows/ci.yml)
-
 A powerful CLI tool for managing and analyzing Toggl Track time entries, built with Rust.
 
 ## Features
