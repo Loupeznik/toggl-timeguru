@@ -358,7 +358,7 @@ async fn handle_tui(
     cli_api_token: Option<String>,
 ) -> Result<()> {
     let config = Config::load()?;
-    let db = Database::new(None)?;
+    let db = std::sync::Arc::new(Database::new(None)?);
 
     let end_date = if let Some(end_str) = end {
         Cli::parse_date(&end_str)?
@@ -408,6 +408,7 @@ async fn handle_tui(
         client,
         runtime_handle,
         config.current_user_email.clone(),
+        db,
     );
     let grouped = group_by_description(app.time_entries.clone());
     app.grouped_entries = grouped;

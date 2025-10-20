@@ -44,6 +44,7 @@ pub struct App {
     pub client: Option<Arc<TogglClient>>,
     pub runtime_handle: Option<tokio::runtime::Handle>,
     pub current_user_email: Option<String>,
+    pub db: Arc<crate::db::Database>,
 }
 
 impl App {
@@ -57,6 +58,7 @@ impl App {
         client: Option<Arc<TogglClient>>,
         runtime_handle: Option<tokio::runtime::Handle>,
         current_user_email: Option<String>,
+        db: Arc<crate::db::Database>,
     ) -> Self {
         let mut list_state = ListState::default();
         if !time_entries.is_empty() {
@@ -100,6 +102,7 @@ impl App {
             client,
             runtime_handle,
             current_user_email,
+            db,
         }
     }
 
@@ -701,6 +704,17 @@ impl App {
                         {
                             all_entry.project_id = Some(project_id);
                         }
+
+                        if let Err(e) = self.db.update_time_entry_project(entry.id, Some(project_id))
+                        {
+                            tracing::error!(
+                                "Failed to update project in database for entry {}: {}",
+                                entry.id,
+                                e
+                            );
+                        } else {
+                            tracing::debug!("Successfully updated project in database for entry {}", entry.id);
+                        }
                     }
                     Ok(Err(e)) => {
                         tracing::error!("API error assigning project to entry {}: {}", entry.id, e);
@@ -783,7 +797,19 @@ impl App {
                         all_entry.project_id = Some(project_id);
                     }
 
-                    self.status_message = Some(format!("Assigned project: {}", project_name));
+                    if let Err(e) = self.db.update_time_entry_project(entry_id, Some(project_id)) {
+                        tracing::error!(
+                            "Failed to update project in database for entry {}: {}",
+                            entry_id,
+                            e
+                        );
+                        self.status_message =
+                            Some(format!("Assigned project but failed to save to database: {}", e));
+                    } else {
+                        tracing::debug!("Successfully updated project in database for entry {}", entry_id);
+                        self.status_message = Some(format!("Assigned project: {}", project_name));
+                    }
+
                     self.show_project_selector = false;
                     self.project_search_query.clear();
                     self.reset_filtered_projects();

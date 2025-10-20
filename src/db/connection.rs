@@ -2,12 +2,13 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::Connection;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use super::schema::init_database;
 use crate::toggl::models::{Project, TimeEntry};
 
 pub struct Database {
-    conn: Connection,
+    conn: Mutex<Connection>,
 }
 
 impl Database {
@@ -25,12 +26,18 @@ impl Database {
 
         init_database(&conn)?;
 
-        Ok(Self { conn })
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     pub fn save_time_entries(&self, entries: &[TimeEntry]) -> Result<usize> {
         let mut count = 0;
         let now = Utc::now().to_rfc3339();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
 
         for entry in entries {
             let tags_json = entry
@@ -42,7 +49,7 @@ impl Database {
                 .as_ref()
                 .map(|t| serde_json::to_string(t).unwrap_or_default());
 
-            self.conn.execute(
+            conn.execute(
                 "INSERT OR REPLACE INTO time_entries
                 (id, workspace_id, project_id, task_id, billable, start, stop, duration,
                  description, tags, tag_ids, user_id, at, synced_at)
@@ -76,6 +83,11 @@ impl Database {
         end_date: DateTime<Utc>,
         user_id: Option<i64>,
     ) -> Result<Vec<TimeEntry>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
+
         let query = if user_id.is_some() {
             "SELECT id, workspace_id, project_id, task_id, billable, start, stop, duration,
                     description, tags, tag_ids, user_id, at
@@ -90,7 +102,7 @@ impl Database {
              ORDER BY start DESC"
         };
 
-        let mut stmt = self.conn.prepare(query)?;
+        let mut stmt = conn.prepare(query)?;
 
         let row_mapper = |row: &rusqlite::Row| {
             let tags_str: Option<String> = row.get(9)?;
@@ -143,9 +155,13 @@ impl Database {
     pub fn save_projects(&self, projects: &[Project]) -> Result<usize> {
         let mut count = 0;
         let now = Utc::now().to_rfc3339();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
 
         for project in projects {
-            self.conn.execute(
+            conn.execute(
                 "INSERT OR REPLACE INTO projects
                 (id, workspace_id, client_id, name, is_private, active, at, created_at, color, billable, synced_at)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
@@ -170,7 +186,12 @@ impl Database {
     }
 
     pub fn get_projects(&self) -> Result<Vec<Project>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
+
+        let mut stmt = conn.prepare(
             "SELECT id, workspace_id, client_id, name, is_private, active, at, created_at, color, billable
              FROM projects
              WHERE active = 1
@@ -208,11 +229,30 @@ impl Database {
         last_entry_id: Option<i64>,
     ) -> Result<()> {
         let now = Utc::now().to_rfc3339();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
 
-        self.conn.execute(
+        conn.execute(
             "INSERT OR REPLACE INTO sync_metadata (resource_type, last_sync, last_entry_id)
              VALUES (?1, ?2, ?3)",
             rusqlite::params![resource_type, now, last_entry_id],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn update_time_entry_project(&self, entry_id: i64, project_id: Option<i64>) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
+
+        conn.execute(
+            "UPDATE time_entries SET project_id = ?1, synced_at = ?2 WHERE id = ?3",
+            rusqlite::params![project_id, now, entry_id],
         )?;
 
         Ok(())
