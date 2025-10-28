@@ -705,7 +705,9 @@ impl App {
                             all_entry.project_id = Some(project_id);
                         }
 
-                        if let Err(e) = self.db.update_time_entry_project(entry.id, Some(project_id))
+                        if let Err(e) = self
+                            .db
+                            .update_time_entry_project(entry.id, Some(project_id))
                         {
                             tracing::error!(
                                 "Failed to update project in database for entry {}: {}",
@@ -713,7 +715,10 @@ impl App {
                                 e
                             );
                         } else {
-                            tracing::debug!("Successfully updated project in database for entry {}", entry.id);
+                            tracing::debug!(
+                                "Successfully updated project in database for entry {}",
+                                entry.id
+                            );
                         }
                     }
                     Ok(Err(e)) => {
@@ -797,16 +802,24 @@ impl App {
                         all_entry.project_id = Some(project_id);
                     }
 
-                    if let Err(e) = self.db.update_time_entry_project(entry_id, Some(project_id)) {
+                    if let Err(e) = self
+                        .db
+                        .update_time_entry_project(entry_id, Some(project_id))
+                    {
                         tracing::error!(
                             "Failed to update project in database for entry {}: {}",
                             entry_id,
                             e
                         );
-                        self.status_message =
-                            Some(format!("Assigned project but failed to save to database: {}", e));
+                        self.status_message = Some(format!(
+                            "Assigned project: {}, but failed to save to database: {}",
+                            project_name, e
+                        ));
                     } else {
-                        tracing::debug!("Successfully updated project in database for entry {}", entry_id);
+                        tracing::debug!(
+                            "Successfully updated project in database for entry {}",
+                            entry_id
+                        );
                         self.status_message = Some(format!("Assigned project: {}", project_name));
                     }
 

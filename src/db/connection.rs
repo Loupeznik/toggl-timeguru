@@ -243,6 +243,17 @@ impl Database {
         Ok(())
     }
 
+    /// Updates the project associated with a specific time entry.
+    ///
+    /// # Parameters
+    /// - `entry_id`: The ID of the time entry to update.
+    /// - `project_id`: The new project ID to associate with the time entry. Use `None` to remove the association.
+    ///
+    /// # Returns
+    /// Returns `Ok(())` if the update was successful, or an error otherwise.
+    ///
+    /// # Side Effects
+    /// This method updates both the `project_id` and the `synced_at` timestamp for the specified time entry.
     pub fn update_time_entry_project(&self, entry_id: i64, project_id: Option<i64>) -> Result<()> {
         let now = Utc::now().to_rfc3339();
         let conn = self
