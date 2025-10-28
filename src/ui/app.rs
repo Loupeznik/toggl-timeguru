@@ -14,7 +14,7 @@ use ratatui::{
 use crate::processor::TimeEntryFilter;
 use crate::toggl::TogglClient;
 use crate::toggl::models::{GroupedTimeEntry, Project, TimeEntry};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 const PAGE_SIZE: usize = 10;
@@ -396,9 +396,8 @@ impl App {
     }
 
     fn save_edited_description(&mut self) {
-        if self.edit_entry_ids.is_empty() || self.edit_input.is_empty() {
-            self.error_message =
-                Some("Cannot save: no entry selected or empty description".to_string());
+        if self.edit_entry_ids.is_empty() {
+            self.error_message = Some("Cannot save: no entry selected".to_string());
             self.show_edit_modal = false;
             return;
         }
@@ -516,7 +515,8 @@ impl App {
                 if success_count == 1 { "y" } else { "ies" }
             ));
 
-            let updated_entry_ids: Vec<i64> = entries_to_update.iter().map(|(_, id)| *id).collect();
+            let updated_entry_ids: HashSet<i64> =
+                entries_to_update.iter().map(|(_, id)| *id).collect();
 
             for entry in self.time_entries.iter_mut() {
                 if updated_entry_ids.contains(&entry.id) {
