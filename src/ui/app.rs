@@ -1285,6 +1285,7 @@ impl App {
             let block = Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Red))
+                .style(Style::default().bg(Color::Black))
                 .title("Error")
                 .title_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
 
