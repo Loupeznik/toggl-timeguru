@@ -52,6 +52,26 @@ cargo clippy -- -D warnings
 cargo check
 ```
 
+## Pre-Commit Checklist
+
+**IMPORTANT**: Before committing ANY changes, you MUST run these commands in order:
+
+```bash
+# 1. Format code
+cargo fmt
+
+# 2. Check for linting issues (MUST pass with no warnings)
+cargo clippy -- -D warnings
+
+# 3. Run all tests
+cargo test
+
+# 4. Build to verify compilation
+cargo build
+```
+
+**All four steps must pass before committing.** If clippy fails, fix the warnings before proceeding. This ensures CI/CD checks will pass.
+
 ## Architecture Overview
 
 ### Module Structure
@@ -323,15 +343,18 @@ No major known issues at this time. Please report any bugs via GitHub issues.
 ## Development Workflow
 
 1. Make changes to code
-2. Run `cargo fmt` to format
-3. Run `cargo clippy -- -D warnings` to check for issues
-4. Run `cargo test` to verify tests pass
-5. Run `cargo build` to compile
-6. Test manually with `cargo run -- [command]`
-7. Commit changes (commits should be concise, present tense, imperative mood)
-8. **IMPORTANT**: When completing features, update progress tracking in BOTH:
+2. **Run the Pre-Commit Checklist** (see above section):
+   - `cargo fmt` - Format code
+   - `cargo clippy -- -D warnings` - Check for linting issues (must pass)
+   - `cargo test` - Verify tests pass
+   - `cargo build` - Verify compilation
+3. Test manually with `cargo run -- [command]`
+4. Commit changes (commits should be concise, present tense, imperative mood)
+5. **IMPORTANT**: When completing features, update progress tracking in BOTH:
    - `docs/PROGRESS.md` - Mark tasks as completed with [x]
    - `docs/VERSION_TIMELINE.md` - Mark version sections as completed with checkmarks
+
+**Note**: The Pre-Commit Checklist is mandatory. All checks must pass before pushing to remote.
 
 ### Feature Request Documentation
 
