@@ -379,21 +379,19 @@ impl App {
 
     fn open_edit_modal(&mut self) {
         if self.show_grouped {
-            if let Some(selected_idx) = self.list_state.selected() {
-                if let Some(grouped_entry) = self.grouped_entries.get(selected_idx) {
-                    self.edit_input = grouped_entry.description.clone().unwrap_or_default();
-                    self.edit_entry_ids = grouped_entry.entries.iter().map(|e| e.id).collect();
-                    self.show_edit_modal = true;
-                }
+            if let Some(selected_idx) = self.list_state.selected()
+                && let Some(grouped_entry) = self.grouped_entries.get(selected_idx)
+            {
+                self.edit_input = grouped_entry.description.clone().unwrap_or_default();
+                self.edit_entry_ids = grouped_entry.entries.iter().map(|e| e.id).collect();
+                self.show_edit_modal = true;
             }
-        } else {
-            if let Some(selected_idx) = self.list_state.selected() {
-                if let Some(entry) = self.time_entries.get(selected_idx) {
-                    self.edit_input = entry.description.clone().unwrap_or_default();
-                    self.edit_entry_ids = vec![entry.id];
-                    self.show_edit_modal = true;
-                }
-            }
+        } else if let Some(selected_idx) = self.list_state.selected()
+            && let Some(entry) = self.time_entries.get(selected_idx)
+        {
+            self.edit_input = entry.description.clone().unwrap_or_default();
+            self.edit_entry_ids = vec![entry.id];
+            self.show_edit_modal = true;
         }
     }
 
