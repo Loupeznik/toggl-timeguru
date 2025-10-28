@@ -159,37 +159,11 @@ This document tracks the development progress across all phases of the Toggl Tim
   - [ ] Support renaming in both individual and grouped views
   - [ ] Add visual feedback for success/failure
 
-### Report Generation
-- [ ] Implement daily summary report
-- [ ] Add weekly summary report
-- [ ] Create monthly summary report
-- [ ] Add project-specific reports
-- [ ] Calculate billable vs non-billable hours
-
-### Data Export
-- [ ] Implement CSV export using csv crate
-- [ ] Add customizable CSV format options
-- [ ] Include metadata in exports (date range, filters)
-
-### Enhanced UI ✅ PARTIALLY COMPLETED (v1.1.0)
-- [x] Improve navigation (page up/down, home/end)
-- [x] Add filter UI panel (billable filter only, full filtering planned for v1.1.2)
-- [ ] Create report selection interface
-- [x] Implement status bar with help hints
-- [ ] Add loading indicators for API calls
-
-### Local Caching ✅ PARTIALLY COMPLETED (v1.1.0)
-- [x] Implement sync mechanism for time entries
-- [x] Add last sync timestamp tracking
-- [x] Create offline mode support
-- [ ] Implement incremental sync (only fetch new entries)
-- [ ] Add cache invalidation logic
-
-### Fuzzy Matching
-- [ ] Integrate strsim or fuzzy-matcher crate
-- [ ] Implement similar description matching
-- [ ] Add similarity threshold configuration
-- [ ] Create preview for fuzzy matches before grouping
+### Logging ✅ COMPLETED (v1.1.0)
+- [x] Add detailed debug logging
+- [x] Configure log levels via environment variable
+- [x] Log API requests/responses in debug mode
+- [x] Add performance metrics logging
 
 ### Testing & Error Handling ✅ PARTIALLY COMPLETED (v1.1.0)
 - [x] Expand unit test coverage
@@ -198,15 +172,136 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [x] Add retry logic for API failures
 - [x] Implement rate limiting handling
 
-### Logging ✅ COMPLETED (v1.1.0)
-- [x] Add detailed debug logging
-- [x] Configure log levels via environment variable
-- [x] Log API requests/responses in debug mode
-- [x] Add performance metrics logging
+## Phase 2.5: v1.2.x - Reports, Filtering & Search
 
-## Phase 3: Additional Features
+### v1.2.0 Report Generation (PLANNED)
+- [ ] Implement daily summary report
+  - [ ] Show total hours worked per day
+  - [ ] Group by project with subtotals
+  - [ ] Include billable vs non-billable breakdown
+- [ ] Add weekly summary report
+  - [ ] Weekly totals by project
+  - [ ] Daily breakdown within week
+- [ ] Create monthly summary report
+  - [ ] Monthly totals by project
+  - [ ] Weekly breakdown within month
+- [ ] Add project-specific reports
+  - [ ] Filter by single project
+  - [ ] Show detailed breakdown
+- [ ] Calculate billable vs non-billable hours
+  - [ ] Add to all report types
+  - [ ] Show percentages
 
-### TUI Testing
+### v1.2.0 Interactive TUI Filtering (PLANNED)
+- [ ] Add project filtering UI to TUI filter panel
+  - [ ] Multi-select project filter
+  - [ ] Visual indication of active filters
+- [ ] Add tag filtering UI to TUI filter panel
+  - [ ] Multi-select tag filter
+  - [ ] Show tag counts
+- [ ] Add client filtering UI to TUI filter panel
+  - [ ] Single-select client filter
+- [ ] Add filter persistence across TUI sessions
+  - [ ] Save active filters to config
+  - [ ] Restore on next launch
+- [ ] Add visual indicators for active filters in entry list
+  - [ ] Badge showing filter count
+  - [ ] Highlight filtered entries
+
+### v1.2.0 Project Selector Enhancements (PLANNED)
+- [ ] Sort projects by usage in last month
+  - [ ] Count time entries per project in last 30 days
+  - [ ] Sort by entry count (most used first)
+  - [ ] Show usage count in selector
+- [ ] Show usage statistics per project
+  - [ ] Display percentage of total time
+  - [ ] Show entry count
+- [ ] Add configuration option to toggle sort method
+  - [ ] Sort by name (default/existing)
+  - [ ] Sort by usage (new option)
+
+### v1.2.1 Instant Project Search (PLANNED)
+- [ ] Type-to-filter in project selector (no '/' needed)
+  - [ ] Start filtering on any character input
+  - [ ] Real-time filtering as user types
+  - [ ] Show "Type to search..." hint
+- [ ] Clear search query with Esc
+  - [ ] Reset to full project list
+  - [ ] Clear search input
+- [ ] Preserve existing '/' search for compatibility
+  - [ ] Keep old search method working
+  - [ ] Allow both methods
+
+### v1.2.1 Fuzzy Matching (PLANNED)
+- [ ] Integrate strsim or fuzzy-matcher crate
+  - [ ] Evaluate both libraries
+  - [ ] Choose based on performance
+- [ ] Implement similar description matching for grouping
+  - [ ] Calculate similarity scores
+  - [ ] Group similar entries together
+- [ ] Add similarity threshold configuration
+  - [ ] Configurable threshold (0.0-1.0)
+  - [ ] Default to 0.8
+- [ ] Create preview for fuzzy matches before grouping
+  - [ ] Show suggested groups
+  - [ ] Allow user to confirm/reject
+
+### v1.2.1 Report Selection Interface (PLANNED)
+- [ ] Create report selection interface in TUI
+  - [ ] Add hotkey to open report menu (e.g., 'r')
+  - [ ] List available report types
+- [ ] Allow selecting report type and date range
+  - [ ] Daily/Weekly/Monthly selector
+  - [ ] Custom date range picker
+- [ ] Display report in TUI or export
+  - [ ] Show in popup or new view
+  - [ ] Option to export to CSV/PDF
+
+### v1.2.2 Incremental Sync (PLANNED)
+- [ ] Implement incremental sync
+  - [ ] Track last sync timestamp per resource
+  - [ ] Only fetch entries modified since last sync
+  - [ ] Use Toggl API since parameter
+- [ ] Add cache invalidation logic
+  - [ ] Invalidate on manual sync request
+  - [ ] Invalidate on date range change
+- [ ] Optimize sync performance for large date ranges
+  - [ ] Batch API requests
+  - [ ] Progress indicator
+
+### v1.2.2 Performance Optimizations (PLANNED)
+- [ ] Profile TUI rendering performance
+  - [ ] Identify slow rendering paths
+  - [ ] Optimize hot paths
+- [ ] Optimize database queries
+  - [ ] Add missing indexes
+  - [ ] Optimize complex queries
+- [ ] Add loading indicators for API calls
+  - [ ] Show spinner during sync
+  - [ ] Show progress for long operations
+
+### Enhanced UI ✅ PARTIALLY COMPLETED (v1.1.0)
+- [x] Improve navigation (page up/down, home/end)
+- [x] Add filter UI panel (billable filter only, full filtering planned for v1.2.0)
+- [ ] Create report selection interface (moved to v1.2.1)
+- [x] Implement status bar with help hints
+- [ ] Add loading indicators for API calls (moved to v1.2.2)
+
+### Local Caching ✅ PARTIALLY COMPLETED (v1.1.0)
+- [x] Implement sync mechanism for time entries
+- [x] Add last sync timestamp tracking
+- [x] Create offline mode support
+- [ ] Implement incremental sync (moved to v1.2.2)
+- [ ] Add cache invalidation logic (moved to v1.2.2)
+
+### Data Export ✅ COMPLETED (v1.1.1)
+- [x] Implement CSV export using csv crate
+- [x] Add customizable CSV format options
+- [x] Include metadata in exports (date range, filters)
+
+## Phase 3: v1.3.x - Quality & Testing
+
+### v1.3.0 TUI Testing (PLANNED)
 - [ ] Research Ratatui TestBackend for TUI testing
 - [ ] Add unit tests for keyboard event handlers
 - [ ] Add integration tests for state transitions (grouping toggle, rounding toggle)
@@ -214,50 +309,54 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [ ] Test navigation edge cases (empty lists, wrapping)
 - [ ] Add tests for footer status display
 
-### Security Enhancements
-- [ ] Evaluate keyring crate for API token storage
-- [ ] Implement OS-native credential storage
-- [ ] Migrate from file-based encryption to keyring (optional)
-
-### PDF Export
-- [ ] Research PDF generation options in Rust
-- [ ] Evaluate external tools vs native library
-- [ ] Implement basic PDF report generation
-- [ ] Add customizable PDF templates
-
-### Documentation
-- [ ] Create comprehensive user guide
-- [ ] Add configuration examples
-- [ ] Document all CLI commands and options
-- [ ] Create troubleshooting guide
-- [ ] Add API integration documentation
-
-### Help System
-- [ ] Implement in-app help viewer
-- [ ] Add contextual help for each view
-- [ ] Create keyboard shortcuts reference
-- [ ] Add command palette or search
-
-### Cross-Platform Testing
+### v1.3.0 Cross-Platform Testing (PLANNED)
 - [ ] Test on Linux (Ubuntu/Debian)
 - [ ] Test on macOS
 - [ ] Test on Windows
 - [ ] Fix platform-specific issues
 - [ ] Verify configuration paths on all platforms
 
-### Advanced Preferences
+### v1.3.1 Security Enhancements (PLANNED)
+- [ ] Evaluate keyring crate for API token storage
+- [ ] Implement OS-native credential storage
+- [ ] Migrate from file-based encryption to keyring (optional)
+
+### v1.3.1 Documentation (PLANNED)
+- [ ] Create comprehensive user guide
+- [ ] Add configuration examples
+- [ ] Document all CLI commands and options
+- [ ] Create troubleshooting guide
+- [ ] Add API integration documentation
+
+### v1.3.1 Help System (PLANNED)
+- [ ] Implement in-app help viewer
+- [ ] Add contextual help for each view
+- [ ] Create keyboard shortcuts reference
+- [ ] Add command palette or search
+
+## Phase 4: v1.4.x - Export & Customization
+
+### v1.4.0 PDF Export (PLANNED)
+- [ ] Research PDF generation options in Rust
+- [ ] Evaluate external tools vs native library
+- [ ] Implement basic PDF report generation
+- [ ] Add customizable PDF templates
+
+### v1.4.0 Advanced Preferences (PLANNED)
 - [ ] Add default filter presets
 - [ ] Implement custom report format templates
 - [ ] Add theme/color customization
 - [ ] Create keyboard shortcut customization
 
-### Packaging
+## Phase 5: v1.5.x - Distribution
+
+### v1.5.0 Packaging (PLANNED)
 - [ ] Create snap package
 - [ ] Add Homebrew formula
 - [ ] Create Debian package (.deb)
 - [ ] Publish to crates.io
 
-### Dockerization
+### v1.5.0 Dockerization (PLANNED)
 - [ ] Create Dockerfile
 - [ ] Optimize image size with multi-stage build
 - [ ] Test Docker image on multiple platforms

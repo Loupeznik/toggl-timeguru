@@ -80,7 +80,7 @@
 - [x] Add day-based grouped export format (--group-by-day)
 - [x] Include metadata in exports (date range, user_id, entry count)
 
-## v1.1.2 - TUI Enhancements & Time Tracking (IN PROGRESS)
+## v1.1.2 - Time Tracking & Entry Editing (IN PROGRESS)
 ### Data Persistence Improvements ✅ COMPLETED
 - [x] Fix project assignment persistence (save to local DB immediately on assignment)
 - [x] Update database record when project is assigned to time entry/group
@@ -92,25 +92,6 @@
 - [x] Prevent long error messages from breaking TUI layout
 - [x] Add keyboard controls (Enter/Esc) to close error popups
 
-### Time Tracking CLI
-- [ ] Create new `track` command for starting/stopping time entries
-- [ ] Add `track start` subcommand with `-m/--message` flag for description
-- [ ] Add `track stop` subcommand to end current time entry
-- [ ] Integrate with Toggl API for real-time tracking
-
-### TUI Time Entry Editing
-- [ ] Add time entry rename functionality in TUI (new hotkey)
-- [ ] Update description in both Toggl API and local database
-- [ ] Add visual feedback for rename success/failure
-- [ ] Support renaming in both individual and grouped views
-
-### Interactive TUI Filtering
-- [ ] Add project filtering UI to TUI filter panel
-- [ ] Add tag filtering UI to TUI filter panel
-- [ ] Add client filtering UI to TUI filter panel
-- [ ] Add filter persistence across TUI sessions
-- [ ] Add visual indicators for active filters in entry list
-
 ### CI/CD & Build Automation ✅ COMPLETED
 - [x] Set up GitHub Actions workflow
 - [x] Configure multi-platform builds (Linux/macOS/Windows × amd64/arm64)
@@ -120,6 +101,19 @@
 - [x] Set up clippy and rustfmt checks in CI
 - [x] Add code coverage reporting
 
+### Time Tracking CLI (PLANNED)
+- [ ] Create new `track` command for starting/stopping time entries
+- [ ] Add `track start` subcommand with `-m/--message` flag for description
+- [ ] Add `track stop` subcommand to end current time entry
+- [ ] Integrate with Toggl API for real-time tracking
+
+### TUI Time Entry Editing (PLANNED)
+- [ ] Add time entry rename functionality in TUI (new hotkey)
+- [ ] Update description in both Toggl API and local database
+- [ ] Add visual feedback for rename success/failure
+- [ ] Support renaming in both individual and grouped views
+
+## v1.2.0 - Reports & Advanced Filtering (PLANNED)
 ### Report Generation
 - [ ] Implement daily summary report
 - [ ] Add weekly summary report
@@ -127,37 +121,111 @@
 - [ ] Add project-specific reports
 - [ ] Calculate billable vs non-billable hours
 
-## v1.1.3 - Fuzzy Matching & Incremental Sync (PLANNED)
-### Fuzzy Matching
+### Interactive TUI Filtering
+- [ ] Add project filtering UI to TUI filter panel
+- [ ] Add tag filtering UI to TUI filter panel
+- [ ] Add client filtering UI to TUI filter panel
+- [ ] Add filter persistence across TUI sessions
+- [ ] Add visual indicators for active filters in entry list
+
+### Project Selector Enhancements
+- [ ] Sort projects by usage in last month (most used first)
+- [ ] Show usage count/percentage per project in selector
+- [ ] Add configuration option to toggle sort method
+
+## v1.2.1 - Smart Search & Fuzzy Matching (PLANNED)
+### Instant Project Search
+- [ ] Type-to-filter in project selector (no '/' needed)
+- [ ] Real-time filtering as user types
+- [ ] Clear search query with Esc
+- [ ] Preserve existing '/' search for compatibility
+
+### Fuzzy Matching for Grouping
 - [ ] Integrate strsim or fuzzy-matcher crate
 - [ ] Implement similar description matching
 - [ ] Add similarity threshold configuration
 - [ ] Create preview for fuzzy matches before grouping
 
+### Report Selection Interface
+- [ ] Create report selection interface in TUI
+- [ ] Add hotkey to open report menu
+- [ ] Allow selecting report type and date range
+
+## v1.2.2 - Sync & Performance (PLANNED)
 ### Incremental Sync
 - [ ] Implement incremental sync (only fetch new entries since last sync)
 - [ ] Add cache invalidation logic
 - [ ] Optimize sync performance for large date ranges
 
-## v1.1.4+ - Remaining Phase 2 Features (PLANNED)
-### Report Selection Interface
-- [ ] Create report selection interface in TUI
+### Performance Optimizations
+- [ ] Profile and optimize TUI rendering
+- [ ] Optimize database queries with proper indexing
+- [ ] Add connection pooling if needed
 
 ### Additional Enhancements
-- Any remaining Phase 2 tasks not yet completed
 - Bug fixes and refinements based on user feedback
-- Performance optimizations
 - Documentation improvements
 
-## Phase 3 - v1.2.0+ (FUTURE)
-- TUI Testing
-- Security Enhancements (keyring)
-- PDF Export
-- Help System
-- Cross-Platform Testing
-- Advanced Preferences
-- Packaging (Homebrew, snap, .deb)
-- Dockerization
+## v1.3.0 - Testing & Quality (PLANNED)
+### TUI Testing
+- [ ] Research Ratatui TestBackend for TUI testing
+- [ ] Add unit tests for keyboard event handlers
+- [ ] Add integration tests for state transitions
+- [ ] Implement UI snapshot tests for rendering output
+- [ ] Test navigation edge cases
+
+### Cross-Platform Testing
+- [ ] Test on Linux (Ubuntu/Debian)
+- [ ] Test on macOS
+- [ ] Test on Windows
+- [ ] Fix platform-specific issues
+- [ ] Verify configuration paths on all platforms
+
+## v1.3.1 - Security & Documentation (PLANNED)
+### Security Enhancements
+- [ ] Evaluate keyring crate for API token storage
+- [ ] Implement OS-native credential storage
+- [ ] Migrate from file-based encryption to keyring
+
+### Documentation
+- [ ] Create comprehensive user guide
+- [ ] Add configuration examples
+- [ ] Document all CLI commands and options
+- [ ] Create troubleshooting guide
+- [ ] Add API integration documentation
+
+### Help System
+- [ ] Implement in-app help viewer
+- [ ] Add contextual help for each view
+- [ ] Create keyboard shortcuts reference
+- [ ] Add command palette or search
+
+## v1.4.0 - Export & Customization (PLANNED)
+### PDF Export
+- [ ] Research PDF generation options in Rust
+- [ ] Evaluate external tools vs native library
+- [ ] Implement basic PDF report generation
+- [ ] Add customizable PDF templates
+
+### Advanced Preferences
+- [ ] Add default filter presets
+- [ ] Implement custom report format templates
+- [ ] Add theme/color customization
+- [ ] Create keyboard shortcut customization
+
+## v1.5.0 - Distribution (PLANNED)
+### Packaging
+- [ ] Create snap package
+- [ ] Add Homebrew formula
+- [ ] Create Debian package (.deb)
+- [ ] Publish to crates.io
+
+### Dockerization
+- [ ] Create Dockerfile
+- [ ] Optimize image size with multi-stage build
+- [ ] Test Docker image on multiple platforms
+- [ ] Publish to Docker Hub
+- [ ] Document Docker usage
 
 ## Notes
 - Each version will be tested, formatted, linted, and committed before push
