@@ -80,11 +80,11 @@
 - [x] Add day-based grouped export format (--group-by-day)
 - [x] Include metadata in exports (date range, user_id, entry count)
 
-## v1.1.2 - TUI Enhancements & Time Tracking (PLANNED)
-### Data Persistence Improvements
-- [ ] Fix project assignment persistence (save to local DB immediately on assignment)
-- [ ] Update database record when project is assigned to time entry/group
-- [ ] Ensure TUI changes persist across sessions without manual sync
+## v1.1.2 - TUI Enhancements & Time Tracking (IN PROGRESS)
+### Data Persistence Improvements ✅ COMPLETED
+- [x] Fix project assignment persistence (save to local DB immediately on assignment)
+- [x] Update database record when project is assigned to time entry/group
+- [x] Ensure TUI changes persist across sessions without manual sync
 
 ### Time Tracking CLI
 - [ ] Create new `track` command for starting/stopping time entries
