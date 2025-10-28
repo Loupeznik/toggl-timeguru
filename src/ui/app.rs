@@ -18,6 +18,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 const PAGE_SIZE: usize = 10;
+const POPUP_MARGIN: u16 = 10;
+const POPUP_MAX_WIDTH: u16 = 80;
+const POPUP_MAX_HEIGHT: u16 = 20;
 
 pub struct App {
     pub time_entries: Vec<TimeEntry>,
@@ -1272,8 +1275,8 @@ impl App {
     fn render_error_popup(&self, f: &mut Frame) {
         if let Some(ref error_msg) = self.error_message {
             let area = f.area();
-            let popup_width = area.width.saturating_sub(10).min(80);
-            let popup_height = area.height.saturating_sub(10).min(20);
+            let popup_width = area.width.saturating_sub(POPUP_MARGIN).min(POPUP_MAX_WIDTH);
+            let popup_height = area.height.saturating_sub(POPUP_MARGIN).min(POPUP_MAX_HEIGHT);
 
             let popup_area = Rect {
                 x: (area.width.saturating_sub(popup_width)) / 2,
