@@ -127,11 +127,13 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [ ] Add tag filtering in TUI
 - [ ] Add client filtering in TUI
 
-### v1.1.2 Data Persistence Improvements (PLANNED)
-- [ ] Fix project assignment persistence issue
-  - [ ] Update database record when project is assigned in TUI
-  - [ ] Ensure changes persist across TUI sessions without manual sync
-  - [ ] Use Database::update_time_entry_project() method
+### v1.1.2 Data Persistence Improvements ✅ COMPLETED
+- [x] Fix project assignment persistence issue
+  - [x] Update database record when project is assigned in TUI
+  - [x] Ensure changes persist across TUI sessions without manual sync
+  - [x] Use Database::update_time_entry_project() method
+  - [x] Made Database thread-safe with Mutex<Connection> for Arc sharing
+  - [x] Added immediate database updates after successful API calls
 
 ### v1.1.2 Time Tracking CLI (PLANNED)
 - [ ] Create new `track` command in CLI
