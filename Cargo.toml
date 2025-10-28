@@ -1,6 +1,6 @@
 [package]
 name = "toggl-timeguru"
-version = "1.1.1"
+version = "1.1.2"
 edition = "2024"
 authors = ["Dominik Zarsky <dzarsky@dzarsky.eu>"]
 description = "A powerful CLI tool for managing and analyzing Toggl Track time entries"
