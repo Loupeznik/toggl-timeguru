@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
 use crate::processor::TimeEntryFilter;
@@ -18,6 +18,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 const PAGE_SIZE: usize = 10;
+const POPUP_MARGIN: u16 = 10;
+const POPUP_MAX_WIDTH: u16 = 80;
+const POPUP_MAX_HEIGHT: u16 = 20;
 
 pub struct App {
     pub time_entries: Vec<TimeEntry>,
@@ -41,6 +44,7 @@ pub struct App {
     pub project_search_query: String,
     pub filtered_projects: Vec<Project>,
     pub status_message: Option<String>,
+    pub error_message: Option<String>,
     pub client: Option<Arc<TogglClient>>,
     pub runtime_handle: Option<tokio::runtime::Handle>,
     pub current_user_email: Option<String>,
@@ -99,6 +103,7 @@ impl App {
             project_search_query: String::new(),
             filtered_projects,
             status_message: None,
+            error_message: None,
             client,
             runtime_handle,
             current_user_email,
@@ -125,6 +130,16 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) {
+        if self.error_message.is_some() {
+            match key.code {
+                KeyCode::Enter | KeyCode::Esc => {
+                    self.error_message = None;
+                }
+                _ => {}
+            }
+            return;
+        }
+
         if self.show_project_selector {
             match key.code {
                 KeyCode::Esc | KeyCode::Char('p') => {
@@ -829,11 +844,11 @@ impl App {
                 }
                 Ok(Err(e)) => {
                     tracing::error!("API error: {}", e);
-                    self.status_message = Some(format!("Failed to assign project: {}", e));
+                    self.error_message = Some(format!("Failed to assign project: {}", e));
                 }
                 Err(e) => {
                     tracing::error!("Channel error while waiting for API result: {}", e);
-                    self.status_message = Some("Error communicating with API task".to_string());
+                    self.error_message = Some(format!("Error communicating with API task: {}", e));
                 }
             }
         }
@@ -883,6 +898,10 @@ impl App {
             self.render_header(f, chunks[0]);
             self.render_list(f, chunks[1]);
             self.render_footer(f, chunks[2]);
+        }
+
+        if self.error_message.is_some() {
+            self.render_error_popup(f);
         }
     }
 
@@ -1251,5 +1270,57 @@ impl App {
             .block(Block::default().borders(Borders::ALL).title("Help"));
 
         f.render_widget(footer, area);
+    }
+
+    fn render_error_popup(&self, f: &mut Frame) {
+        if let Some(ref error_msg) = self.error_message {
+            let area = f.area();
+            let popup_width = area.width.saturating_sub(POPUP_MARGIN).min(POPUP_MAX_WIDTH);
+            let popup_height = area
+                .height
+                .saturating_sub(POPUP_MARGIN)
+                .min(POPUP_MAX_HEIGHT);
+
+            let popup_area = Rect {
+                x: (area.width.saturating_sub(popup_width)) / 2,
+                y: (area.height.saturating_sub(popup_height)) / 2,
+                width: popup_width,
+                height: popup_height,
+            };
+
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Red))
+                .style(Style::default().bg(Color::Black))
+                .title("Error")
+                .title_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
+
+            let inner_area = block.inner(popup_area);
+
+            let text = vec![
+                Line::from(""),
+                Line::from(vec![Span::styled(
+                    error_msg.as_str(),
+                    Style::default().fg(Color::White),
+                )]),
+                Line::from(""),
+                Line::from(""),
+                Line::from(vec![Span::styled(
+                    "Press Enter or Esc to close",
+                    Style::default()
+                        .fg(Color::Gray)
+                        .add_modifier(Modifier::ITALIC),
+                )]),
+            ];
+
+            f.render_widget(Clear, popup_area);
+            f.render_widget(block, popup_area);
+
+            let paragraph = Paragraph::new(text)
+                .wrap(ratatui::widgets::Wrap { trim: true })
+                .style(Style::default().bg(Color::Black));
+
+            f.render_widget(paragraph, inner_area);
+        }
     }
 }

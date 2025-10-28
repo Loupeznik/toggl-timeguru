@@ -135,6 +135,14 @@ This document tracks the development progress across all phases of the Toggl Tim
   - [x] Made Database thread-safe with Mutex<Connection> for Arc sharing
   - [x] Added immediate database updates after successful API calls
 
+### v1.1.2 TUI Error Display ✅ COMPLETED
+- [x] Fix critical bug where error messages corrupt TUI display
+  - [x] Implement error popup modal for displaying API errors
+  - [x] Separate error_message field from status_message
+  - [x] Add proper error wrapping for long messages
+  - [x] Add keyboard controls (Enter/Esc) to dismiss error popups
+  - [x] Prevent errors with newlines from breaking layout
+
 ### v1.1.2 Time Tracking CLI (PLANNED)
 - [ ] Create new `track` command in CLI
   - [ ] Add `track start` subcommand with `-m/--message` flag for description
