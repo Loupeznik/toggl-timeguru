@@ -86,6 +86,12 @@
 - [x] Update database record when project is assigned to time entry/group
 - [x] Ensure TUI changes persist across sessions without manual sync
 
+### TUI Error Display ✅ COMPLETED
+- [x] Fix error message display corruption in TUI
+- [x] Implement error popup modal for displaying API errors
+- [x] Prevent long error messages from breaking TUI layout
+- [x] Add keyboard controls (Enter/Esc) to close error popups
+
 ### Time Tracking CLI
 - [ ] Create new `track` command for starting/stopping time entries
 - [ ] Add `track start` subcommand with `-m/--message` flag for description
