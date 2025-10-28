@@ -1276,7 +1276,10 @@ impl App {
         if let Some(ref error_msg) = self.error_message {
             let area = f.area();
             let popup_width = area.width.saturating_sub(POPUP_MARGIN).min(POPUP_MAX_WIDTH);
-            let popup_height = area.height.saturating_sub(POPUP_MARGIN).min(POPUP_MAX_HEIGHT);
+            let popup_height = area
+                .height
+                .saturating_sub(POPUP_MARGIN)
+                .min(POPUP_MAX_HEIGHT);
 
             let popup_area = Rect {
                 x: (area.width.saturating_sub(popup_width)) / 2,
