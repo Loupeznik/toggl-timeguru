@@ -4,9 +4,11 @@ A powerful CLI tool for managing and analyzing Toggl Track time entries, built w
 
 ## Features
 
+- **Time tracking** from command line - start and stop time entries directly
 - **Sync time entries** from Toggl Track to local SQLite database
 - **Interactive TUI** for browsing time entries with vim-style navigation
 - **Project assignment** directly from TUI with search and batch operations
+- **Time entry editing** in TUI for updating descriptions with batch support
 - **Group entries** by description or by description within each day
 - **Filter entries** by date range (project and tag filtering via CLI only)
 - **CSV export** with grouping options for external reporting
@@ -117,6 +119,7 @@ toggl-timeguru tui --start 2025-01-01 --end 2025-01-31
 - `s` - Toggle date sorting (ascending/descending)
 - `r` - Toggle rounding on/off (default: ON in grouped view)
 - `p` - Open project selector to assign project (works on individual or grouped entries)
+- `e` - Edit description (works on individual or grouped entries, batch edit supported)
 - `y` - Copy selected entry description to clipboard
 - `q`/`Esc` - Quit
 
@@ -151,6 +154,21 @@ toggl-timeguru clean --config
 # Skip confirmation prompt (useful for automation)
 toggl-timeguru clean --all --confirm
 ```
+
+#### `track` - Start and stop time tracking
+
+```bash
+# Start a new time entry with description
+toggl-timeguru track start --message "Working on feature X"
+
+# Start a new time entry without description
+toggl-timeguru track start
+
+# Stop the currently running time entry
+toggl-timeguru track stop
+```
+
+**Note:** The track command works directly with the Toggl API and requires an active internet connection.
 
 ### Global Options
 
@@ -274,8 +292,11 @@ See [docs/PROGRESS.md](docs/PROGRESS.md) for detailed development progress.
 - ✅ CSV export with grouping options
 - ✅ Enhanced UI with better navigation
 - ✅ Project assignment in TUI
+- ✅ Time entry editing in TUI
 - ✅ Multi-account support
 - ✅ Data management CLI
+- ✅ Time tracking CLI (start/stop commands)
+- ✅ CI/CD & Build Automation
 - Interactive TUI filtering (project, tags, client)
 - Report generation (daily, weekly, monthly)
 - Fuzzy description matching

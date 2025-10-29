@@ -109,6 +109,24 @@ pub enum Commands {
         #[arg(long, help = "Group entries by description and day")]
         group_by_day: bool,
     },
+
+    #[command(about = "Start or stop time tracking")]
+    Track {
+        #[command(subcommand)]
+        action: TrackAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TrackAction {
+    #[command(about = "Start a new time entry")]
+    Start {
+        #[arg(short, long, help = "Description for the time entry")]
+        message: Option<String>,
+    },
+
+    #[command(about = "Stop the currently running time entry")]
+    Stop,
 }
 
 impl Cli {

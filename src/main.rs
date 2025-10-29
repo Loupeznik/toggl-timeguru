@@ -16,7 +16,7 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use cli::{Cli, Commands};
+use cli::{Cli, Commands, TrackAction};
 use config::Config;
 use db::Database;
 use processor::{
@@ -93,6 +93,8 @@ async fn main() -> Result<()> {
                 group,
                 group_by_day,
             } => handle_export(start, end, output, include_metadata, group, group_by_day).await?,
+
+            Commands::Track { action } => handle_track(action, cli.api_token).await?,
         }
     } else {
         println!("Toggl TimeGuru - Use --help for usage information");
@@ -705,6 +707,70 @@ async fn handle_export(
 
     wtr.flush()?;
     println!("Successfully exported to: {}", output);
+    Ok(())
+}
+
+async fn handle_track(action: TrackAction, cli_api_token: Option<String>) -> Result<()> {
+    let config = Config::load()?;
+    let api_token = get_api_token(cli_api_token, &config)?;
+    let client = TogglClient::new(api_token)?;
+
+    let workspaces = client.get_workspaces().await?;
+    let workspace_id = workspaces
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("No workspace found for your account"))?
+        .id;
+
+    match action {
+        TrackAction::Start { message } => {
+            println!("Starting time tracking...");
+
+            let time_entry = client
+                .start_time_entry(workspace_id, message.clone())
+                .await?;
+
+            println!("✓ Time tracking started successfully!");
+            if let Some(desc) = time_entry.description {
+                println!("  Description: {}", desc);
+            } else {
+                println!("  Description: (No description)");
+            }
+            println!(
+                "  Started at: {}",
+                time_entry.start.format("%Y-%m-%d %H:%M:%S")
+            );
+            println!("  Entry ID: {}", time_entry.id);
+        }
+
+        TrackAction::Stop => {
+            println!("Stopping time tracking...");
+
+            let current_entry = client.get_current_time_entry(workspace_id).await?;
+
+            if let Some(entry) = current_entry {
+                let stopped_entry = client.stop_time_entry(workspace_id, entry.id).await?;
+
+                println!("✓ Time tracking stopped successfully!");
+                if let Some(desc) = stopped_entry.description {
+                    println!("  Description: {}", desc);
+                } else {
+                    println!("  Description: (No description)");
+                }
+                println!(
+                    "  Started at: {}",
+                    stopped_entry.start.format("%Y-%m-%d %H:%M:%S")
+                );
+                if let Some(stop) = stopped_entry.stop {
+                    println!("  Stopped at: {}", stop.format("%Y-%m-%d %H:%M:%S"));
+                }
+                let duration_hours = stopped_entry.duration as f64 / 3600.0;
+                println!("  Duration: {:.2}h", duration_hours);
+            } else {
+                println!("No time entry is currently running.");
+            }
+        }
+    }
+
     Ok(())
 }
 
