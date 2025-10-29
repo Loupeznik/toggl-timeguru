@@ -155,12 +155,14 @@ This document tracks the development progress across all phases of the Toggl Tim
   - [x] Real-time text input handling (typing, backspace)
   - [x] Proper async/sync integration with Arc<TogglClient> and Handle::spawn()
 
-### v1.1.2 Time Tracking CLI (PLANNED)
-- [ ] Create new `track` command in CLI
-  - [ ] Add `track start` subcommand with `-m/--message` flag for description
-  - [ ] Add `track stop` subcommand to end current running entry
-  - [ ] Integrate with Toggl API start_time_entry() and stop_time_entry()
-  - [ ] Add validation and error handling for API calls
+### v1.1.2 Time Tracking CLI ✅ COMPLETED
+- [x] Create new `track` command in CLI
+  - [x] Add `track start` subcommand with `-m/--message` flag for description
+  - [x] Add `track stop` subcommand to end current running entry
+  - [x] Integrate with Toggl API start_time_entry() and stop_time_entry()
+  - [x] Add get_current_time_entry() API method for checking running entries
+  - [x] Add validation and error handling for API calls
+  - [x] Handle edge cases (no running entry, starting without description)
 
 ### Logging ✅ COMPLETED (v1.1.0)
 - [x] Add detailed debug logging

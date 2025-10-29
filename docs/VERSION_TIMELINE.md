@@ -80,7 +80,7 @@
 - [x] Add day-based grouped export format (--group-by-day)
 - [x] Include metadata in exports (date range, user_id, entry count)
 
-## v1.1.2 - Time Tracking & Entry Editing (IN PROGRESS)
+## v1.1.2 - Time Tracking & Entry Editing ✅ COMPLETED
 ### Data Persistence Improvements ✅ COMPLETED
 - [x] Fix project assignment persistence (save to local DB immediately on assignment)
 - [x] Update database record when project is assigned to time entry/group
@@ -109,11 +109,11 @@
 - [x] Support editing in both individual and grouped views
 - [x] Batch edit support for grouped entries
 
-### Time Tracking CLI (PLANNED)
-- [ ] Create new `track` command for starting/stopping time entries
-- [ ] Add `track start` subcommand with `-m/--message` flag for description
-- [ ] Add `track stop` subcommand to end current time entry
-- [ ] Integrate with Toggl API for real-time tracking
+### Time Tracking CLI ✅ COMPLETED
+- [x] Create new `track` command for starting/stopping time entries
+- [x] Add `track start` subcommand with `-m/--message` flag for description
+- [x] Add `track stop` subcommand to end current time entry
+- [x] Integrate with Toggl API for real-time tracking
 
 ## v1.2.0 - Reports & Advanced Filtering (PLANNED)
 ### Report Generation

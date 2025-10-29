@@ -412,6 +412,215 @@ impl TogglClient {
             }
         }
     }
+
+    pub async fn start_time_entry(
+        &self,
+        workspace_id: i64,
+        description: Option<String>,
+    ) -> Result<TimeEntry> {
+        info!(
+            "start_time_entry called: workspace={}, description={:?}",
+            workspace_id, description
+        );
+
+        let url = format!("{}/workspaces/{}/time_entries", self.base_url, workspace_id);
+
+        debug!("API URL: {}", url);
+
+        let now = Utc::now();
+        let mut body = serde_json::Map::new();
+        body.insert(
+            "workspace_id".to_string(),
+            serde_json::Value::Number(workspace_id.into()),
+        );
+        body.insert(
+            "start".to_string(),
+            serde_json::Value::String(now.to_rfc3339()),
+        );
+        body.insert(
+            "duration".to_string(),
+            serde_json::Value::Number((-1).into()),
+        );
+        body.insert(
+            "created_with".to_string(),
+            serde_json::Value::String("toggl-timeguru".to_string()),
+        );
+
+        if let Some(desc) = description {
+            body.insert("description".to_string(), serde_json::Value::String(desc));
+        }
+
+        debug!("Request body: {:?}", body);
+
+        info!("Sending POST request to Toggl API...");
+
+        let response = match self
+            .client
+            .post(&url)
+            .header(header::AUTHORIZATION, self.auth_header())
+            .json(&body)
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                debug!("Received response from API");
+                resp
+            }
+            Err(e) => {
+                error!("Network error sending POST request: {}", e);
+                return Err(anyhow::anyhow!("Network error: {}", e));
+            }
+        };
+
+        match response.status() {
+            StatusCode::OK | StatusCode::CREATED => {
+                let time_entry = response
+                    .json::<TimeEntry>()
+                    .await
+                    .context("Failed to parse time entry response")?;
+                info!("Successfully started time entry with id {}", time_entry.id);
+                Ok(time_entry)
+            }
+            StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => {
+                error!("Authentication failed while starting time entry");
+                Err(anyhow::anyhow!(
+                    "Authentication failed. Please check your API token."
+                ))
+            }
+            status => {
+                let error_text = response.text().await.unwrap_or_default();
+                error!(
+                    "Failed to start time entry - Status: {}, Error: {}",
+                    status, error_text
+                );
+                Err(anyhow::anyhow!(
+                    "Failed to start time entry. Status: {}, Error: {}",
+                    status,
+                    error_text
+                ))
+            }
+        }
+    }
+
+    pub async fn stop_time_entry(&self, workspace_id: i64, entry_id: i64) -> Result<TimeEntry> {
+        info!(
+            "stop_time_entry called: workspace={}, entry_id={}",
+            workspace_id, entry_id
+        );
+
+        let url = format!(
+            "{}/workspaces/{}/time_entries/{}/stop",
+            self.base_url, workspace_id, entry_id
+        );
+
+        debug!("API URL: {}", url);
+
+        info!("Sending PATCH request to Toggl API...");
+
+        let response = match self
+            .client
+            .patch(&url)
+            .header(header::AUTHORIZATION, self.auth_header())
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                debug!("Received response from API");
+                resp
+            }
+            Err(e) => {
+                error!("Network error sending PATCH request: {}", e);
+                return Err(anyhow::anyhow!("Network error: {}", e));
+            }
+        };
+
+        match response.status() {
+            StatusCode::OK => {
+                let time_entry = response
+                    .json::<TimeEntry>()
+                    .await
+                    .context("Failed to parse time entry response")?;
+                info!("Successfully stopped time entry with id {}", time_entry.id);
+                Ok(time_entry)
+            }
+            StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => {
+                error!("Authentication failed while stopping time entry");
+                Err(anyhow::anyhow!(
+                    "Authentication failed. Please check your API token."
+                ))
+            }
+            StatusCode::NOT_FOUND => {
+                error!("Time entry {} not found", entry_id);
+                Err(anyhow::anyhow!(
+                    "Time entry {} not found. It may have already been stopped.",
+                    entry_id
+                ))
+            }
+            status => {
+                let error_text = response.text().await.unwrap_or_default();
+                error!(
+                    "Failed to stop time entry - Status: {}, Error: {}",
+                    status, error_text
+                );
+                Err(anyhow::anyhow!(
+                    "Failed to stop time entry. Status: {}, Error: {}",
+                    status,
+                    error_text
+                ))
+            }
+        }
+    }
+
+    pub async fn get_current_time_entry(&self) -> Result<Option<TimeEntry>> {
+        info!("get_current_time_entry called");
+
+        let url = format!("{}/me/time_entries/current", self.base_url);
+
+        debug!("API URL: {}", url);
+
+        let response = self
+            .client
+            .get(&url)
+            .header(header::AUTHORIZATION, self.auth_header())
+            .send()
+            .await
+            .context("Failed to send request to Toggl API")?;
+
+        match response.status() {
+            StatusCode::OK => {
+                let time_entry = response
+                    .json::<Option<TimeEntry>>()
+                    .await
+                    .context("Failed to parse time entry response")?;
+
+                if let Some(ref entry) = time_entry {
+                    info!("Found running time entry with id {}", entry.id);
+                } else {
+                    info!("No running time entry found");
+                }
+
+                Ok(time_entry)
+            }
+            StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => {
+                error!("Authentication failed while getting current time entry");
+                Err(anyhow::anyhow!(
+                    "Authentication failed. Please check your API token."
+                ))
+            }
+            status => {
+                let error_text = response.text().await.unwrap_or_default();
+                error!(
+                    "Failed to get current time entry - Status: {}, Error: {}",
+                    status, error_text
+                );
+                Err(anyhow::anyhow!(
+                    "Failed to get current time entry. Status: {}, Error: {}",
+                    status,
+                    error_text
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
