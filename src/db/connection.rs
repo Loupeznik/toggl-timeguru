@@ -268,4 +268,30 @@ impl Database {
 
         Ok(())
     }
+
+    /// Updates the description of a specific time entry.
+    ///
+    /// # Parameters
+    /// - `entry_id`: The ID of the time entry to update.
+    /// - `description`: The new description for the time entry.
+    ///
+    /// # Returns
+    /// Returns `Ok(())` if the update was successful, or an error otherwise.
+    ///
+    /// # Side Effects
+    /// This method updates both the `description` and the `synced_at` timestamp for the specified time entry.
+    pub fn update_time_entry_description(&self, entry_id: i64, description: String) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
+
+        conn.execute(
+            "UPDATE time_entries SET description = ?1, synced_at = ?2 WHERE id = ?3",
+            rusqlite::params![description, now, entry_id],
+        )?;
+
+        Ok(())
+    }
 }

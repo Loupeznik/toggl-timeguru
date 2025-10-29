@@ -14,7 +14,7 @@ use ratatui::{
 use crate::processor::TimeEntryFilter;
 use crate::toggl::TogglClient;
 use crate::toggl::models::{GroupedTimeEntry, Project, TimeEntry};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 const PAGE_SIZE: usize = 10;
@@ -45,6 +45,9 @@ pub struct App {
     pub filtered_projects: Vec<Project>,
     pub status_message: Option<String>,
     pub error_message: Option<String>,
+    pub show_edit_modal: bool,
+    pub edit_input: String,
+    pub edit_entry_ids: Vec<i64>,
     pub client: Option<Arc<TogglClient>>,
     pub runtime_handle: Option<tokio::runtime::Handle>,
     pub current_user_email: Option<String>,
@@ -104,6 +107,9 @@ impl App {
             filtered_projects,
             status_message: None,
             error_message: None,
+            show_edit_modal: false,
+            edit_input: String::new(),
+            edit_entry_ids: Vec::new(),
             client,
             runtime_handle,
             current_user_email,
@@ -134,6 +140,27 @@ impl App {
             match key.code {
                 KeyCode::Enter | KeyCode::Esc => {
                     self.error_message = None;
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        if self.show_edit_modal {
+            match key.code {
+                KeyCode::Enter => {
+                    self.save_edited_description();
+                }
+                KeyCode::Esc => {
+                    self.show_edit_modal = false;
+                    self.edit_input.clear();
+                    self.edit_entry_ids.clear();
+                }
+                KeyCode::Char(c) => {
+                    self.edit_input.push(c);
+                }
+                KeyCode::Backspace => {
+                    self.edit_input.pop();
                 }
                 _ => {}
             }
@@ -241,6 +268,9 @@ impl App {
                 KeyCode::Char('p') => {
                     self.toggle_project_selector();
                 }
+                KeyCode::Char('e') => {
+                    self.open_edit_modal();
+                }
                 _ => {}
             }
         }
@@ -345,6 +375,171 @@ impl App {
 
     fn toggle_project_selector(&mut self) {
         self.show_project_selector = !self.show_project_selector;
+    }
+
+    fn open_edit_modal(&mut self) {
+        if self.show_grouped {
+            if let Some(selected_idx) = self.list_state.selected()
+                && let Some(grouped_entry) = self.grouped_entries.get(selected_idx)
+            {
+                self.edit_input = grouped_entry.description.clone().unwrap_or_default();
+                self.edit_entry_ids = grouped_entry.entries.iter().map(|e| e.id).collect();
+                self.show_edit_modal = true;
+            }
+        } else if let Some(selected_idx) = self.list_state.selected()
+            && let Some(entry) = self.time_entries.get(selected_idx)
+        {
+            self.edit_input = entry.description.clone().unwrap_or_default();
+            self.edit_entry_ids = vec![entry.id];
+            self.show_edit_modal = true;
+        }
+    }
+
+    fn save_edited_description(&mut self) {
+        if self.edit_entry_ids.is_empty() {
+            self.error_message = Some("Cannot save: no entry selected".to_string());
+            self.show_edit_modal = false;
+            return;
+        }
+
+        let client = match &self.client {
+            Some(c) => c.clone(),
+            None => {
+                self.error_message = Some("API client not available".to_string());
+                self.show_edit_modal = false;
+                return;
+            }
+        };
+
+        let handle = match &self.runtime_handle {
+            Some(h) => h.clone(),
+            None => {
+                self.error_message = Some("Runtime handle not available".to_string());
+                self.show_edit_modal = false;
+                return;
+            }
+        };
+
+        let db = self.db.clone();
+        let entry_ids = self.edit_entry_ids.clone();
+        let new_description = self.edit_input.clone();
+
+        let entries_to_update: Vec<(i64, i64)> = self
+            .all_entries
+            .iter()
+            .filter(|e| entry_ids.contains(&e.id))
+            .map(|e| (e.workspace_id, e.id))
+            .collect();
+
+        if entries_to_update.is_empty() {
+            self.error_message = Some("Could not find entries to update".to_string());
+            self.show_edit_modal = false;
+            return;
+        }
+
+        self.show_edit_modal = false;
+        self.edit_input.clear();
+        self.edit_entry_ids.clear();
+
+        tracing::info!(
+            "Updating description for {} entries",
+            entries_to_update.len()
+        );
+
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        for (workspace_id, entry_id) in entries_to_update.iter() {
+            let client_clone = client.clone();
+            let db_clone = db.clone();
+            let desc_clone = new_description.clone();
+            let tx_clone = tx.clone();
+            let workspace_id_clone = *workspace_id;
+            let entry_id_clone = *entry_id;
+
+            handle.spawn(async move {
+                let result = client_clone
+                    .update_time_entry_description(
+                        workspace_id_clone,
+                        entry_id_clone,
+                        desc_clone.clone(),
+                    )
+                    .await;
+
+                match result {
+                    Ok(_) => {
+                        if let Err(e) =
+                            db_clone.update_time_entry_description(entry_id_clone, desc_clone)
+                        {
+                            let _ = tx_clone
+                                .send(Err(anyhow::anyhow!("Failed to update database: {}", e)));
+                        } else {
+                            let _ = tx_clone.send(Ok(entry_id_clone));
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx_clone.send(Err(e));
+                    }
+                }
+            });
+        }
+
+        drop(tx);
+
+        let mut success_count = 0;
+        let mut error_occurred = false;
+
+        for _ in 0..entries_to_update.len() {
+            match rx.recv() {
+                Ok(Ok(_)) => {
+                    success_count += 1;
+                }
+                Ok(Err(e)) => {
+                    tracing::error!("Failed to update description: {}", e);
+                    self.error_message = Some(format!("Failed to update description: {}", e));
+                    error_occurred = true;
+                    break;
+                }
+                Err(e) => {
+                    tracing::error!("Channel error: {}", e);
+                    self.error_message = Some(format!("Error communicating with API task: {}", e));
+                    error_occurred = true;
+                    break;
+                }
+            }
+        }
+
+        if !error_occurred {
+            self.status_message = Some(format!(
+                "Successfully updated description for {} entr{}",
+                success_count,
+                if success_count == 1 { "y" } else { "ies" }
+            ));
+
+            let updated_entry_ids: HashSet<i64> =
+                entries_to_update.iter().map(|(_, id)| *id).collect();
+
+            for entry in self.time_entries.iter_mut() {
+                if updated_entry_ids.contains(&entry.id) {
+                    entry.description = Some(new_description.clone());
+                }
+            }
+
+            for entry in self.all_entries.iter_mut() {
+                if updated_entry_ids.contains(&entry.id) {
+                    entry.description = Some(new_description.clone());
+                }
+            }
+
+            for entry in self.grouped_entries.iter_mut() {
+                if entry
+                    .entries
+                    .iter()
+                    .any(|e| updated_entry_ids.contains(&e.id))
+                {
+                    entry.description = Some(new_description.clone());
+                }
+            }
+        }
     }
 
     fn toggle_billable_filter(&mut self) {
@@ -903,6 +1098,10 @@ impl App {
         if self.error_message.is_some() {
             self.render_error_popup(f);
         }
+
+        if self.show_edit_modal {
+            self.render_edit_modal(f);
+        }
     }
 
     fn render_header(&self, f: &mut Frame, area: Rect) {
@@ -1219,6 +1418,8 @@ impl App {
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
                 Span::raw("y:Copy "),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::raw("e:Edit "),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
                 Span::raw("q/Esc:Quit"),
             ]),
             Line::from(vec![
@@ -1322,5 +1523,61 @@ impl App {
 
             f.render_widget(paragraph, inner_area);
         }
+    }
+
+    fn render_edit_modal(&self, f: &mut Frame) {
+        if !self.show_edit_modal {
+            return;
+        }
+
+        let area = f.area();
+        let popup_width = area.width.saturating_sub(POPUP_MARGIN).min(60);
+        let popup_height = 7;
+
+        let popup_area = Rect {
+            x: (area.width.saturating_sub(popup_width)) / 2,
+            y: (area.height.saturating_sub(popup_height)) / 2,
+            width: popup_width,
+            height: popup_height,
+        };
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan))
+            .style(Style::default().bg(Color::Black))
+            .title("Edit Description")
+            .title_style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            );
+
+        let inner_area = block.inner(popup_area);
+
+        let text = vec![
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                &self.edit_input,
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "Enter: Save  │  Esc: Cancel",
+                Style::default()
+                    .fg(Color::Gray)
+                    .add_modifier(Modifier::ITALIC),
+            )]),
+        ];
+
+        f.render_widget(Clear, popup_area);
+        f.render_widget(block, popup_area);
+
+        let paragraph = Paragraph::new(text)
+            .wrap(ratatui::widgets::Wrap { trim: true })
+            .style(Style::default().bg(Color::Black));
+
+        f.render_widget(paragraph, inner_area);
     }
 }

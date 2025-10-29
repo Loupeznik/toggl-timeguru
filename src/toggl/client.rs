@@ -333,6 +333,85 @@ impl TogglClient {
             }
         }
     }
+
+    pub async fn update_time_entry_description(
+        &self,
+        workspace_id: i64,
+        entry_id: i64,
+        description: String,
+    ) -> Result<TimeEntry> {
+        info!(
+            "update_time_entry_description called: workspace={}, entry={}, description='{}'",
+            workspace_id, entry_id, description
+        );
+
+        let url = format!(
+            "{}/workspaces/{}/time_entries/{}",
+            self.base_url, workspace_id, entry_id
+        );
+
+        debug!("API URL: {}", url);
+
+        let mut body = serde_json::Map::new();
+        body.insert(
+            "description".to_string(),
+            serde_json::Value::String(description.clone()),
+        );
+
+        debug!("Request body: {:?}", body);
+
+        info!("Sending PUT request to Toggl API...");
+
+        let response = match self
+            .client
+            .put(&url)
+            .header(header::AUTHORIZATION, self.auth_header())
+            .json(&body)
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                debug!("Received response from API");
+                resp
+            }
+            Err(e) => {
+                error!("Network error sending PUT request: {}", e);
+                return Err(anyhow::anyhow!("Network error: {}", e));
+            }
+        };
+
+        match response.status() {
+            StatusCode::OK => {
+                let updated_entry = response
+                    .json::<TimeEntry>()
+                    .await
+                    .context("Failed to parse updated time entry")?;
+                info!(
+                    "Successfully updated time entry {} description to '{}'",
+                    entry_id, description
+                );
+                Ok(updated_entry)
+            }
+            StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => {
+                error!("Authentication failed while updating time entry");
+                Err(anyhow::anyhow!(
+                    "Authentication failed. Please check your API token."
+                ))
+            }
+            status => {
+                let error_text = response.text().await.unwrap_or_default();
+                error!(
+                    "Failed to update time entry - Status: {}, Error: {}",
+                    status, error_text
+                );
+                Err(anyhow::anyhow!(
+                    "Failed to update time entry. Status: {}, Error: {}",
+                    status,
+                    error_text
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(test)]

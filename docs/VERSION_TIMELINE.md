@@ -101,17 +101,19 @@
 - [x] Set up clippy and rustfmt checks in CI
 - [x] Add code coverage reporting
 
+### TUI Time Entry Editing ✅ COMPLETED
+- [x] Add time entry edit functionality in TUI (hotkey 'e')
+- [x] Implement description input modal with text field
+- [x] Update description in both Toggl API and local database
+- [x] Add visual feedback for edit success/failure
+- [x] Support editing in both individual and grouped views
+- [x] Batch edit support for grouped entries
+
 ### Time Tracking CLI (PLANNED)
 - [ ] Create new `track` command for starting/stopping time entries
 - [ ] Add `track start` subcommand with `-m/--message` flag for description
 - [ ] Add `track stop` subcommand to end current time entry
 - [ ] Integrate with Toggl API for real-time tracking
-
-### TUI Time Entry Editing (PLANNED)
-- [ ] Add time entry rename functionality in TUI (new hotkey)
-- [ ] Update description in both Toggl API and local database
-- [ ] Add visual feedback for rename success/failure
-- [ ] Support renaming in both individual and grouped views
 
 ## v1.2.0 - Reports & Advanced Filtering (PLANNED)
 ### Report Generation

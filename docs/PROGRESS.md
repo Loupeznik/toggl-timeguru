@@ -143,21 +143,24 @@ This document tracks the development progress across all phases of the Toggl Tim
   - [x] Add keyboard controls (Enter/Esc) to dismiss error popups
   - [x] Prevent errors with newlines from breaking layout
 
+### v1.1.2 TUI Time Entry Editing ✅ COMPLETED
+- [x] Add time entry edit functionality in TUI
+  - [x] Assign hotkey for edit action ('e' hotkey)
+  - [x] Implement description input modal with text field
+  - [x] Update description via Toggl API (update_time_entry_description method)
+  - [x] Save updated description to local database immediately
+  - [x] Support editing in both individual and grouped views
+  - [x] Batch edit support for grouped entries (edits all entries in group)
+  - [x] Add visual feedback for success/failure (status and error messages)
+  - [x] Real-time text input handling (typing, backspace)
+  - [x] Proper async/sync integration with Arc<TogglClient> and Handle::spawn()
+
 ### v1.1.2 Time Tracking CLI (PLANNED)
 - [ ] Create new `track` command in CLI
   - [ ] Add `track start` subcommand with `-m/--message` flag for description
   - [ ] Add `track stop` subcommand to end current running entry
   - [ ] Integrate with Toggl API start_time_entry() and stop_time_entry()
   - [ ] Add validation and error handling for API calls
-
-### v1.1.2 TUI Time Entry Editing (PLANNED)
-- [ ] Add time entry rename functionality in TUI
-  - [ ] Assign hotkey for rename action (e.g., 'e' for edit)
-  - [ ] Implement description input prompt/dialog
-  - [ ] Update description via Toggl API
-  - [ ] Save updated description to local database immediately
-  - [ ] Support renaming in both individual and grouped views
-  - [ ] Add visual feedback for success/failure
 
 ### Logging ✅ COMPLETED (v1.1.0)
 - [x] Add detailed debug logging
