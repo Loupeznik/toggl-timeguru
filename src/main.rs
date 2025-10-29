@@ -745,7 +745,7 @@ async fn handle_track(action: TrackAction, cli_api_token: Option<String>) -> Res
         TrackAction::Stop => {
             println!("Stopping time tracking...");
 
-            let current_entry = client.get_current_time_entry(workspace_id).await?;
+            let current_entry = client.get_current_time_entry().await?;
 
             if let Some(entry) = current_entry {
                 let stopped_entry = client.stop_time_entry(workspace_id, entry.id).await?;

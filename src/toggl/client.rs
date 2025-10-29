@@ -571,8 +571,8 @@ impl TogglClient {
         }
     }
 
-    pub async fn get_current_time_entry(&self, workspace_id: i64) -> Result<Option<TimeEntry>> {
-        info!("get_current_time_entry called: workspace={}", workspace_id);
+    pub async fn get_current_time_entry(&self) -> Result<Option<TimeEntry>> {
+        info!("get_current_time_entry called");
 
         let url = format!("{}/me/time_entries/current", self.base_url);
 
