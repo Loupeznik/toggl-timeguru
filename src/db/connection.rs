@@ -311,4 +311,66 @@ impl Database {
 
         Ok(())
     }
+
+    pub fn get_entry_ids_in_range(
+        &self,
+        start_date: DateTime<Utc>,
+        end_date: DateTime<Utc>,
+        user_id: Option<i64>,
+    ) -> Result<Vec<i64>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
+
+        let (query, params): (&str, Vec<Box<dyn rusqlite::ToSql>>) = if let Some(uid) = user_id {
+            (
+                "SELECT id FROM time_entries WHERE start >= ?1 AND start <= ?2 AND user_id = ?3",
+                vec![
+                    Box::new(start_date.to_rfc3339()),
+                    Box::new(end_date.to_rfc3339()),
+                    Box::new(uid),
+                ],
+            )
+        } else {
+            (
+                "SELECT id FROM time_entries WHERE start >= ?1 AND start <= ?2",
+                vec![
+                    Box::new(start_date.to_rfc3339()),
+                    Box::new(end_date.to_rfc3339()),
+                ],
+            )
+        };
+
+        let mut stmt = conn.prepare(query)?;
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let ids = stmt.query_map(params_refs.as_slice(), |row| row.get(0))?;
+
+        ids.collect::<Result<Vec<_>, _>>()
+            .context("Failed to get entry IDs from database")
+    }
+
+    pub fn delete_entries_by_ids(&self, entry_ids: &[i64]) -> Result<usize> {
+        if entry_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
+
+        let placeholders = entry_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let query = format!("DELETE FROM time_entries WHERE id IN ({})", placeholders);
+
+        let params: Vec<&dyn rusqlite::ToSql> = entry_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::ToSql)
+            .collect();
+
+        let count = conn.execute(&query, params.as_slice())?;
+
+        Ok(count)
+    }
 }
