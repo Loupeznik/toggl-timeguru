@@ -33,6 +33,7 @@ impl Database {
 
     pub fn save_time_entries(&self, entries: &[TimeEntry]) -> Result<usize> {
         let mut count = 0;
+        let mut deleted_count = 0;
         let now = Utc::now().to_rfc3339();
         let conn = self
             .conn
@@ -40,6 +41,15 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
 
         for entry in entries {
+            if entry.server_deleted_at.is_some() {
+                conn.execute(
+                    "DELETE FROM time_entries WHERE id = ?1",
+                    rusqlite::params![entry.id],
+                )?;
+                deleted_count += 1;
+                continue;
+            }
+
             let tags_json = entry
                 .tags
                 .as_ref()
@@ -72,6 +82,13 @@ impl Database {
                 ],
             )?;
             count += 1;
+        }
+
+        if deleted_count > 0 {
+            tracing::info!(
+                "Deleted {} time entries marked as deleted by server",
+                deleted_count
+            );
         }
 
         Ok(count)
