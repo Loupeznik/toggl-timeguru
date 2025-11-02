@@ -33,7 +33,6 @@ impl Database {
 
     pub fn save_time_entries(&self, entries: &[TimeEntry]) -> Result<usize> {
         let mut count = 0;
-        let mut deleted_count = 0;
         let now = Utc::now().to_rfc3339();
         let conn = self
             .conn
@@ -41,15 +40,6 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
 
         for entry in entries {
-            if entry.server_deleted_at.is_some() {
-                conn.execute(
-                    "DELETE FROM time_entries WHERE id = ?1",
-                    rusqlite::params![entry.id],
-                )?;
-                deleted_count += 1;
-                continue;
-            }
-
             let tags_json = entry
                 .tags
                 .as_ref()
@@ -82,13 +72,6 @@ impl Database {
                 ],
             )?;
             count += 1;
-        }
-
-        if deleted_count > 0 {
-            tracing::info!(
-                "Deleted {} time entries marked as deleted by server",
-                deleted_count
-            );
         }
 
         Ok(count)
@@ -312,6 +295,15 @@ impl Database {
         Ok(())
     }
 
+    /// Retrieves IDs of time entries within a specified date range.
+    ///
+    /// # Parameters
+    /// - `start_date`: The start of the date range (inclusive).
+    /// - `end_date`: The end of the date range (inclusive).
+    /// - `user_id`: Optional user ID to filter entries. If `None`, returns entries for all users.
+    ///
+    /// # Returns
+    /// Returns `Ok(Vec<i64>)` containing the IDs of matching time entries.
     pub fn get_entry_ids_in_range(
         &self,
         start_date: DateTime<Utc>,
@@ -351,6 +343,16 @@ impl Database {
             .context("Failed to get entry IDs from database")
     }
 
+    /// Deletes time entries from the database whose IDs are provided in the `entry_ids` slice.
+    ///
+    /// # Parameters
+    /// - `entry_ids`: A slice of entry IDs (`i64`) to delete from the database.
+    ///
+    /// # Returns
+    /// Returns `Ok(usize)` indicating the number of entries deleted.
+    ///
+    /// # Behavior
+    /// If the `entry_ids` slice is empty, the method returns `Ok(0)` and performs no deletion.
     pub fn delete_entries_by_ids(&self, entry_ids: &[i64]) -> Result<usize> {
         if entry_ids.is_empty() {
             return Ok(0);
@@ -361,7 +363,10 @@ impl Database {
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to lock database: {}", e))?;
 
-        let placeholders = entry_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        // Only "?" placeholders are inserted, never user data, so this is safe from SQL injection
+        let placeholders = std::iter::repeat_n("?", entry_ids.len())
+            .collect::<Vec<_>>()
+            .join(",");
         let query = format!("DELETE FROM time_entries WHERE id IN ({})", placeholders);
 
         let params: Vec<&dyn rusqlite::ToSql> = entry_ids
