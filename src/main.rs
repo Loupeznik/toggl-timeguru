@@ -332,7 +332,25 @@ async fn handle_sync(
         end_date.format("%Y-%m-%d")
     );
 
+    let local_ids = db.get_entry_ids_in_range(start_date, end_date, config.current_user_id)?;
+
     let entries = client.get_time_entries(start_date, end_date).await?;
+
+    let api_ids: std::collections::HashSet<i64> = entries.iter().map(|e| e.id).collect();
+
+    let deleted_ids: Vec<i64> = local_ids
+        .into_iter()
+        .filter(|id| !api_ids.contains(id))
+        .collect();
+
+    if !deleted_ids.is_empty() {
+        let deleted_count = db.delete_entries_by_ids(&deleted_ids)?;
+        println!(
+            "Deleted {} time entries that were removed from Toggl",
+            deleted_count
+        );
+    }
+
     let count = db.save_time_entries(&entries)?;
     db.update_sync_metadata("time_entries", entries.last().map(|e| e.id))?;
 
