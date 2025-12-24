@@ -2,14 +2,52 @@ use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose};
 use chrono::{DateTime, Utc};
 use reqwest::{Client, StatusCode, header};
+use std::sync::{Arc, Mutex};
 use tracing::{debug, error, info, warn};
 
 use super::models::{Project, TimeEntry, Workspace};
+
+#[derive(Debug, Clone)]
+pub struct BulkUpdateOperation {
+    pub op: String,
+    pub path: String,
+    pub value: serde_json::Value,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct BulkUpdateResponse {
+    pub success: Vec<i64>,
+    pub failure: Vec<BulkUpdateFailure>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct BulkUpdateFailure {
+    pub id: i64,
+    pub message: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct RateLimitInfo {
+    pub remaining: Option<u32>,
+    pub resets_in: Option<u32>,
+    pub last_updated: std::time::Instant,
+}
+
+impl Default for RateLimitInfo {
+    fn default() -> Self {
+        Self {
+            remaining: None,
+            resets_in: None,
+            last_updated: std::time::Instant::now(),
+        }
+    }
+}
 
 pub struct TogglClient {
     client: Client,
     api_token: String,
     base_url: String,
+    rate_limit_info: Arc<Mutex<RateLimitInfo>>,
 }
 
 impl TogglClient {
@@ -29,6 +67,7 @@ impl TogglClient {
             client,
             api_token,
             base_url: "https://api.track.toggl.com/api/v9".to_string(),
+            rate_limit_info: Arc::new(Mutex::new(RateLimitInfo::default())),
         })
     }
 
@@ -36,6 +75,71 @@ impl TogglClient {
         let credentials = format!("{}:api_token", self.api_token);
         let encoded = general_purpose::STANDARD.encode(credentials.as_bytes());
         format!("Basic {}", encoded)
+    }
+
+    fn extract_rate_limit_headers(&self, response: &reqwest::Response) {
+        let remaining = response
+            .headers()
+            .get("X-Toggl-Quota-Remaining")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u32>().ok());
+
+        let resets_in = response
+            .headers()
+            .get("X-Toggl-Quota-Resets-In")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u32>().ok());
+
+        if let Ok(mut info) = self.rate_limit_info.lock() {
+            info.remaining = remaining;
+            info.resets_in = resets_in;
+            info.last_updated = std::time::Instant::now();
+
+            if let Some(r) = remaining {
+                debug!("Rate limit remaining: {} requests", r);
+                if r < 10 {
+                    warn!("Rate limit low: {} requests remaining", r);
+                }
+                if r < 5 {
+                    warn!(
+                        "Rate limit critical: {} requests remaining, quota resets in {} seconds",
+                        r,
+                        resets_in.unwrap_or(0)
+                    );
+                }
+            }
+        }
+    }
+
+    pub fn get_rate_limit_info(&self) -> Option<RateLimitInfo> {
+        self.rate_limit_info.lock().ok().map(|info| RateLimitInfo {
+            remaining: info.remaining,
+            resets_in: info.resets_in,
+            last_updated: info.last_updated,
+        })
+    }
+
+    #[allow(dead_code)]
+    async fn check_rate_limit_before_request(&self) -> Result<()> {
+        if let Some(info) = self.get_rate_limit_info()
+            && let Some(remaining) = info.remaining
+        {
+            if remaining == 0 {
+                let wait_time = info.resets_in.unwrap_or(60);
+                warn!(
+                    "Rate limit exhausted, waiting {} seconds for quota reset",
+                    wait_time
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(wait_time as u64)).await;
+            } else if remaining < 5 {
+                debug!(
+                    "Rate limit low ({}), adding 500ms delay to avoid exhaustion",
+                    remaining
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+        }
+        Ok(())
     }
 
     pub async fn get_current_user(&self) -> Result<serde_json::Value> {
@@ -51,6 +155,8 @@ impl TogglClient {
             .send()
             .await
             .context("Failed to send request to Toggl API")?;
+
+        self.extract_rate_limit_headers(&response);
 
         match response.status() {
             StatusCode::OK => {
@@ -151,6 +257,8 @@ impl TogglClient {
             let status = response.status();
             debug!("API response status: {} (attempt {})", status, attempt);
 
+            self.extract_rate_limit_headers(&response);
+
             match status {
                 StatusCode::OK => {
                     let entries = response
@@ -168,8 +276,22 @@ impl TogglClient {
                     ));
                 }
                 StatusCode::TOO_MANY_REQUESTS => {
-                    warn!("Rate limit hit, will retry if attempts remain");
+                    warn!("Rate limit hit (429), will retry if attempts remain");
                     last_error = Some(anyhow::anyhow!("Rate limit exceeded"));
+                    continue;
+                }
+                StatusCode::PAYMENT_REQUIRED => {
+                    let wait_time = if let Some(info) = self.get_rate_limit_info() {
+                        info.resets_in.unwrap_or(60)
+                    } else {
+                        60
+                    };
+                    warn!(
+                        "Quota exceeded (402), waiting {} seconds for reset",
+                        wait_time
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(wait_time as u64)).await;
+                    last_error = Some(anyhow::anyhow!("Quota exceeded, retrying"));
                     continue;
                 }
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -334,6 +456,7 @@ impl TogglClient {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn update_time_entry_description(
         &self,
         workspace_id: i64,
@@ -621,6 +744,167 @@ impl TogglClient {
             }
         }
     }
+
+    pub async fn bulk_update_time_entries(
+        &self,
+        workspace_id: i64,
+        entry_ids: &[i64],
+        operations: Vec<BulkUpdateOperation>,
+    ) -> Result<BulkUpdateResponse> {
+        if entry_ids.is_empty() {
+            anyhow::bail!("Cannot update zero entries");
+        }
+
+        if entry_ids.len() > 100 {
+            anyhow::bail!(
+                "Cannot update more than 100 entries per request (got {})",
+                entry_ids.len()
+            );
+        }
+
+        let ids_str = entry_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let url = format!(
+            "{}/workspaces/{}/time_entries/{}",
+            self.base_url, workspace_id, ids_str
+        );
+
+        info!(
+            "bulk_update_time_entries called: workspace={}, entry_count={}",
+            workspace_id,
+            entry_ids.len()
+        );
+        debug!("API URL: {}", url);
+
+        let body: Vec<serde_json::Value> = operations
+            .into_iter()
+            .map(|op| {
+                serde_json::json!({
+                    "op": op.op,
+                    "path": op.path,
+                    "value": op.value
+                })
+            })
+            .collect();
+
+        debug!("Request body: {:?}", body);
+
+        info!("Sending PATCH request to Toggl API...");
+
+        let response = match self
+            .client
+            .patch(&url)
+            .header(header::AUTHORIZATION, self.auth_header())
+            .json(&body)
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                debug!("Received response from API");
+                resp
+            }
+            Err(e) => {
+                error!("Network error sending PATCH request: {}", e);
+                return Err(anyhow::anyhow!("Network error: {}", e));
+            }
+        };
+
+        self.extract_rate_limit_headers(&response);
+
+        match response.status() {
+            StatusCode::OK => {
+                let result = response
+                    .json::<BulkUpdateResponse>()
+                    .await
+                    .context("Failed to parse bulk update response")?;
+                info!(
+                    "Bulk update completed: {} succeeded, {} failed",
+                    result.success.len(),
+                    result.failure.len()
+                );
+                Ok(result)
+            }
+            StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => {
+                error!("Authentication failed during bulk update");
+                Err(anyhow::anyhow!(
+                    "Authentication failed. Please check your API token."
+                ))
+            }
+            StatusCode::TOO_MANY_REQUESTS => {
+                warn!("Rate limit exceeded during bulk update");
+                Err(anyhow::anyhow!("Rate limit exceeded (429)"))
+            }
+            StatusCode::PAYMENT_REQUIRED => {
+                warn!("Quota exceeded during bulk update");
+                Err(anyhow::anyhow!("Quota exceeded (402)"))
+            }
+            status => {
+                let error_text = response.text().await.unwrap_or_default();
+                error!(
+                    "Bulk update failed - Status: {}, Error: {}",
+                    status, error_text
+                );
+                Err(anyhow::anyhow!(
+                    "Bulk update failed. Status: {}, Error: {}",
+                    status,
+                    error_text
+                ))
+            }
+        }
+    }
+
+    pub async fn bulk_assign_project(
+        &self,
+        workspace_id: i64,
+        entry_ids: &[i64],
+        project_id: Option<i64>,
+    ) -> Result<BulkUpdateResponse> {
+        let value = match project_id {
+            Some(id) => serde_json::Value::Number(id.into()),
+            None => serde_json::Value::Null,
+        };
+
+        let operations = vec![BulkUpdateOperation {
+            op: "replace".to_string(),
+            path: "/project_id".to_string(),
+            value,
+        }];
+
+        info!(
+            "bulk_assign_project called: {} entries, project_id={:?}",
+            entry_ids.len(),
+            project_id
+        );
+
+        self.bulk_update_time_entries(workspace_id, entry_ids, operations)
+            .await
+    }
+
+    pub async fn bulk_update_descriptions(
+        &self,
+        workspace_id: i64,
+        entry_ids: &[i64],
+        description: String,
+    ) -> Result<BulkUpdateResponse> {
+        let operations = vec![BulkUpdateOperation {
+            op: "replace".to_string(),
+            path: "/description".to_string(),
+            value: serde_json::Value::String(description.clone()),
+        }];
+
+        info!(
+            "bulk_update_descriptions called: {} entries, description='{}'",
+            entry_ids.len(),
+            description
+        );
+
+        self.bulk_update_time_entries(workspace_id, entry_ids, operations)
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -638,5 +922,67 @@ mod tests {
         let client = TogglClient::new("test_token".to_string()).unwrap();
         let auth = client.auth_header();
         assert!(auth.starts_with("Basic "));
+    }
+
+    #[test]
+    fn test_rate_limit_info_default() {
+        let info = RateLimitInfo::default();
+        assert!(info.remaining.is_none());
+        assert!(info.resets_in.is_none());
+    }
+
+    #[test]
+    fn test_bulk_update_operation_creation() {
+        let op = BulkUpdateOperation {
+            op: "replace".to_string(),
+            path: "/project_id".to_string(),
+            value: serde_json::Value::Number(123.into()),
+        };
+        assert_eq!(op.op, "replace");
+        assert_eq!(op.path, "/project_id");
+    }
+
+    #[tokio::test]
+    async fn test_bulk_update_validates_empty_entries() {
+        let client = TogglClient::new("test_token".to_string()).unwrap();
+        let entry_ids: Vec<i64> = vec![];
+        let operations = vec![BulkUpdateOperation {
+            op: "replace".to_string(),
+            path: "/project_id".to_string(),
+            value: serde_json::Value::Number(123.into()),
+        }];
+
+        let result = client
+            .bulk_update_time_entries(12345, &entry_ids, operations)
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("zero entries"));
+    }
+
+    #[tokio::test]
+    async fn test_bulk_update_validates_max_entries() {
+        let client = TogglClient::new("test_token".to_string()).unwrap();
+        let entry_ids: Vec<i64> = (1..=101).collect();
+        let operations = vec![BulkUpdateOperation {
+            op: "replace".to_string(),
+            path: "/project_id".to_string(),
+            value: serde_json::Value::Number(123.into()),
+        }];
+
+        let result = client
+            .bulk_update_time_entries(12345, &entry_ids, operations)
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("more than 100"));
+    }
+
+    #[test]
+    fn test_get_rate_limit_info() {
+        let client = TogglClient::new("test_token".to_string()).unwrap();
+        let info = client.get_rate_limit_info();
+        assert!(info.is_some());
+        let info = info.unwrap();
+        assert!(info.remaining.is_none());
+        assert!(info.resets_in.is_none());
     }
 }
