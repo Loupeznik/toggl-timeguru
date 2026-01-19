@@ -119,7 +119,6 @@ impl TogglClient {
         })
     }
 
-    #[allow(dead_code)]
     async fn check_rate_limit_before_request(&self) -> Result<()> {
         if let Some(info) = self.get_rate_limit_info()
             && let Some(remaining) = info.remaining
@@ -793,68 +792,105 @@ impl TogglClient {
 
         debug!("Request body: {:?}", body);
 
-        info!("Sending PATCH request to Toggl API...");
+        let max_retries = 3;
+        let mut last_error: Option<anyhow::Error> = None;
 
-        let response = match self
-            .client
-            .patch(&url)
-            .header(header::AUTHORIZATION, self.auth_header())
-            .json(&body)
-            .send()
-            .await
-        {
-            Ok(resp) => {
-                debug!("Received response from API");
-                resp
-            }
-            Err(e) => {
-                error!("Network error sending PATCH request: {}", e);
-                return Err(anyhow::anyhow!("Network error: {}", e));
-            }
-        };
+        for attempt in 1..=max_retries {
+            self.check_rate_limit_before_request().await?;
 
-        self.extract_rate_limit_headers(&response);
+            info!(
+                "Sending PATCH request to Toggl API... (attempt {}/{})",
+                attempt, max_retries
+            );
 
-        match response.status() {
-            StatusCode::OK => {
-                let result = response
-                    .json::<BulkUpdateResponse>()
-                    .await
-                    .context("Failed to parse bulk update response")?;
-                info!(
-                    "Bulk update completed: {} succeeded, {} failed",
-                    result.success.len(),
-                    result.failure.len()
-                );
-                Ok(result)
-            }
-            StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => {
-                error!("Authentication failed during bulk update");
-                Err(anyhow::anyhow!(
-                    "Authentication failed. Please check your API token."
-                ))
-            }
-            StatusCode::TOO_MANY_REQUESTS => {
-                warn!("Rate limit exceeded during bulk update");
-                Err(anyhow::anyhow!("Rate limit exceeded (429)"))
-            }
-            StatusCode::PAYMENT_REQUIRED => {
-                warn!("Quota exceeded during bulk update");
-                Err(anyhow::anyhow!("Quota exceeded (402)"))
-            }
-            status => {
-                let error_text = response.text().await.unwrap_or_default();
-                error!(
-                    "Bulk update failed - Status: {}, Error: {}",
-                    status, error_text
-                );
-                Err(anyhow::anyhow!(
-                    "Bulk update failed. Status: {}, Error: {}",
-                    status,
-                    error_text
-                ))
+            let response = match self
+                .client
+                .patch(&url)
+                .header(header::AUTHORIZATION, self.auth_header())
+                .json(&body)
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    debug!("Received response from API");
+                    resp
+                }
+                Err(e) => {
+                    error!("Network error sending PATCH request: {}", e);
+                    last_error = Some(anyhow::anyhow!("Network error: {}", e));
+                    continue;
+                }
+            };
+
+            self.extract_rate_limit_headers(&response);
+
+            let status = response.status();
+
+            match status {
+                StatusCode::OK => {
+                    let result = response
+                        .json::<BulkUpdateResponse>()
+                        .await
+                        .context("Failed to parse bulk update response")?;
+                    info!(
+                        "Bulk update completed: {} succeeded, {} failed",
+                        result.success.len(),
+                        result.failure.len()
+                    );
+                    return Ok(result);
+                }
+                StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => {
+                    error!("Authentication failed during bulk update");
+                    return Err(anyhow::anyhow!(
+                        "Authentication failed. Please check your API token."
+                    ));
+                }
+                StatusCode::TOO_MANY_REQUESTS => {
+                    warn!("Rate limit hit (429), will retry if attempts remain");
+                    last_error = Some(anyhow::anyhow!("Rate limit exceeded"));
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    continue;
+                }
+                StatusCode::PAYMENT_REQUIRED => {
+                    let wait_time = if let Some(info) = self.get_rate_limit_info() {
+                        info.resets_in.unwrap_or(60)
+                    } else {
+                        60
+                    };
+                    warn!(
+                        "Quota exceeded (402), waiting {} seconds for reset",
+                        wait_time
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(wait_time as u64)).await;
+                    last_error = Some(anyhow::anyhow!("Quota exceeded, retrying"));
+                    continue;
+                }
+                StatusCode::INTERNAL_SERVER_ERROR
+                | StatusCode::BAD_GATEWAY
+                | StatusCode::SERVICE_UNAVAILABLE
+                | StatusCode::GATEWAY_TIMEOUT => {
+                    warn!("Server error {}, will retry if attempts remain", status);
+                    last_error = Some(anyhow::anyhow!("Server error: {}", status));
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    continue;
+                }
+                _ => {
+                    let error_text = response.text().await.unwrap_or_default();
+                    error!(
+                        "Bulk update failed - Status: {}, Error: {}",
+                        status, error_text
+                    );
+                    return Err(anyhow::anyhow!(
+                        "Bulk update failed. Status: {}, Error: {}",
+                        status,
+                        error_text
+                    ));
+                }
             }
         }
+
+        Err(last_error
+            .unwrap_or_else(|| anyhow::anyhow!("Bulk update failed after {} retries", max_retries)))
     }
 
     pub async fn bulk_assign_project(

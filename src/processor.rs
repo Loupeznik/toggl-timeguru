@@ -3,16 +3,20 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
 pub fn group_by_description(entries: Vec<TimeEntry>) -> Vec<GroupedTimeEntry> {
-    let mut groups: HashMap<(Option<String>, Option<i64>), Vec<TimeEntry>> = HashMap::new();
+    let mut groups: HashMap<(Option<String>, Option<i64>, i64), Vec<TimeEntry>> = HashMap::new();
 
     for entry in entries {
-        let key = (entry.description.clone(), entry.project_id);
+        let key = (
+            entry.description.clone(),
+            entry.project_id,
+            entry.workspace_id,
+        );
         groups.entry(key).or_default().push(entry);
     }
 
     let mut grouped: Vec<GroupedTimeEntry> = groups
         .into_iter()
-        .map(|((description, project_id), entries)| {
+        .map(|((description, project_id, _workspace_id), entries)| {
             let total_duration: i64 = entries.iter().map(|e| e.duration).sum();
 
             GroupedTimeEntry {
@@ -30,7 +34,7 @@ pub fn group_by_description(entries: Vec<TimeEntry>) -> Vec<GroupedTimeEntry> {
     grouped
 }
 
-type GroupKey = (Option<String>, Option<i64>, DateTime<Utc>);
+type GroupKey = (Option<String>, Option<i64>, i64, DateTime<Utc>);
 
 pub fn group_by_description_and_day(entries: Vec<TimeEntry>) -> Vec<GroupedTimeEntry> {
     let mut groups: HashMap<GroupKey, Vec<TimeEntry>> = HashMap::new();
@@ -39,7 +43,12 @@ pub fn group_by_description_and_day(entries: Vec<TimeEntry>) -> Vec<GroupedTimeE
     for entry in entries {
         let date = entry.start.date_naive().and_hms_opt(0, 0, 0).unwrap();
         let date_utc = DateTime::<Utc>::from_naive_utc_and_offset(date, Utc);
-        let key = (entry.description.clone(), entry.project_id, date_utc);
+        let key = (
+            entry.description.clone(),
+            entry.project_id,
+            entry.workspace_id,
+            date_utc,
+        );
 
         if !groups.contains_key(&key) {
             order.push(key.clone());
@@ -50,9 +59,9 @@ pub fn group_by_description_and_day(entries: Vec<TimeEntry>) -> Vec<GroupedTimeE
     order
         .into_iter()
         .map(|key| {
-            let (description, project_id, date) = key;
+            let (description, project_id, workspace_id, date) = key;
             let entries = groups
-                .remove(&(description.clone(), project_id, date))
+                .remove(&(description.clone(), project_id, workspace_id, date))
                 .unwrap();
             let total_duration: i64 = entries.iter().map(|e| e.duration).sum();
 
