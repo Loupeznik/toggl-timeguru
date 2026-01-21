@@ -448,8 +448,10 @@ impl App {
                 self.show_edit_modal = false;
                 return;
             } else if remaining < 5 {
-                self.status_message =
-                    Some(format!("Warning: Only {} API requests remaining", remaining));
+                self.status_message = Some(format!(
+                    "Warning: Only {} API requests remaining",
+                    remaining
+                ));
             }
         }
 
@@ -962,8 +964,10 @@ impl App {
                     self.reset_filtered_projects();
                     return;
                 } else if remaining < 5 {
-                    self.status_message =
-                        Some(format!("Warning: Only {} API requests remaining", remaining));
+                    self.status_message = Some(format!(
+                        "Warning: Only {} API requests remaining",
+                        remaining
+                    ));
                 }
             }
 
