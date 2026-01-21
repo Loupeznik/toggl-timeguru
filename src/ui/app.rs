@@ -437,6 +437,22 @@ impl App {
             return;
         }
 
+        if let Some(rate_limit_info) = client.get_rate_limit_info()
+            && let Some(remaining) = rate_limit_info.remaining
+        {
+            if remaining == 0 {
+                self.error_message = Some(format!(
+                    "API rate limit exhausted. Please wait {} seconds and try again.",
+                    rate_limit_info.resets_in.unwrap_or(60)
+                ));
+                self.show_edit_modal = false;
+                return;
+            } else if remaining < 5 {
+                self.status_message =
+                    Some(format!("Warning: Only {} API requests remaining", remaining));
+            }
+        }
+
         self.show_edit_modal = false;
         self.edit_input.clear();
         self.edit_entry_ids.clear();
@@ -470,7 +486,9 @@ impl App {
                 let _ = tx.send(result);
             });
 
-            match rx.recv() {
+            self.status_message = Some("Updating description...".to_string());
+
+            match rx.recv_timeout(std::time::Duration::from_secs(10)) {
                 Ok(Ok(bulk_result)) => {
                     tracing::debug!(
                         "Bulk description update completed: {} succeeded, {} failed",
@@ -521,17 +539,37 @@ impl App {
                 Ok(Err(e)) => {
                     tracing::error!("API error during bulk description update: {}", e);
                     fail_count += chunk.len();
-                    self.error_message = Some(format!("Failed to update description: {}", e));
+                    let error_msg = e.to_string();
+                    if error_msg.contains("Rate limit") || error_msg.contains("429") {
+                        self.error_message = Some(
+                            "API rate limit exceeded. Please wait a few minutes and try again."
+                                .to_string(),
+                        );
+                    } else if error_msg.contains("Quota") || error_msg.contains("402") {
+                        self.error_message = Some(
+                            "API quota exceeded. Please wait for quota reset and try again."
+                                .to_string(),
+                        );
+                    } else {
+                        self.error_message = Some(format!("Failed to update description: {}", e));
+                    }
                     error_occurred = true;
                     break;
                 }
-                Err(e) => {
-                    tracing::error!(
-                        "Channel error while waiting for bulk description API result: {}",
-                        e
-                    );
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    tracing::warn!("API request timed out (likely due to rate limiting)");
                     fail_count += chunk.len();
-                    self.error_message = Some(format!("Error communicating with API: {}", e));
+                    self.error_message = Some(
+                        "Update timed out (API rate limit hit). The operation may still complete in the background. Please wait and refresh.".to_string(),
+                    );
+                    error_occurred = true;
+                    break;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    tracing::error!("Channel disconnected while waiting for API result");
+                    fail_count += chunk.len();
+                    self.error_message =
+                        Some("Lost connection to API task. Please try again.".to_string());
                     error_occurred = true;
                     break;
                 }
@@ -911,6 +949,24 @@ impl App {
                 }
             };
 
+            if let Some(rate_limit_info) = client.get_rate_limit_info()
+                && let Some(remaining) = rate_limit_info.remaining
+            {
+                if remaining == 0 {
+                    self.error_message = Some(format!(
+                        "API rate limit exhausted. Please wait {} seconds and try again.",
+                        rate_limit_info.resets_in.unwrap_or(60)
+                    ));
+                    self.show_project_selector = false;
+                    self.project_search_query.clear();
+                    self.reset_filtered_projects();
+                    return;
+                } else if remaining < 5 {
+                    self.status_message =
+                        Some(format!("Warning: Only {} API requests remaining", remaining));
+                }
+            }
+
             let total_entries = grouped_entry.entries.len();
             let entry_ids: Vec<i64> = grouped_entry.entries.iter().map(|e| e.id).collect();
             let workspace_id = grouped_entry.entries[0].workspace_id;
@@ -941,7 +997,9 @@ impl App {
                     let _ = tx.send(result);
                 });
 
-                match rx.recv() {
+                self.status_message = Some("Assigning project...".to_string());
+
+                match rx.recv_timeout(std::time::Duration::from_secs(10)) {
                     Ok(Ok(bulk_result)) => {
                         tracing::debug!(
                             "Bulk update completed: {} succeeded, {} failed",
@@ -993,12 +1051,35 @@ impl App {
                     Ok(Err(e)) => {
                         tracing::error!("API error during bulk assignment: {}", e);
                         fail_count += chunk.len();
-                        self.error_message = Some(format!("Failed to assign project: {}", e));
+                        let error_msg = e.to_string();
+                        if error_msg.contains("Rate limit") || error_msg.contains("429") {
+                            self.error_message = Some(
+                                "API rate limit exceeded. Please wait a few minutes and try again."
+                                    .to_string(),
+                            );
+                        } else if error_msg.contains("Quota") || error_msg.contains("402") {
+                            self.error_message = Some(
+                                "API quota exceeded. Please wait for quota reset and try again."
+                                    .to_string(),
+                            );
+                        } else {
+                            self.error_message = Some(format!("Failed to assign project: {}", e));
+                        }
                     }
-                    Err(e) => {
-                        tracing::error!("Channel error while waiting for bulk API result: {}", e);
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        tracing::warn!(
+                            "Project assignment timed out (likely due to rate limiting)"
+                        );
                         fail_count += chunk.len();
-                        self.error_message = Some(format!("Error communicating with API: {}", e));
+                        self.error_message = Some(
+                            "Assignment timed out (API rate limit hit). The operation may still complete in the background. Please wait and refresh.".to_string(),
+                        );
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                        tracing::error!("Channel disconnected during project assignment");
+                        fail_count += chunk.len();
+                        self.error_message =
+                            Some("Lost connection to API task. Please try again.".to_string());
                     }
                 }
             }
