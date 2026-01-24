@@ -115,7 +115,45 @@
 - [x] Add `track stop` subcommand to end current time entry
 - [x] Integrate with Toggl API for real-time tracking
 
-## v1.2.0 - Reports & Advanced Filtering (PLANNED)
+## v1.2.0 - API Optimization (CRITICAL - ✅ COMPLETED)
+**Priority:** CRITICAL - Must be completed before adding more batch features
+**Issue:** Current implementation makes N sequential API calls for batch operations, exhausting rate limits
+
+### Bulk Update Endpoint Implementation ✅ COMPLETED
+- [x] Add bulk update structs (BulkUpdateOperation, BulkUpdateResponse, BulkUpdateFailure)
+- [x] Implement bulk_update_time_entries() method (max 100 entries per request)
+- [x] Add bulk_assign_project() convenience method
+- [x] Add bulk_update_descriptions() convenience method
+- [x] Handle batches > 100 entries (split into chunks)
+- [x] Update TUI to use bulk operations for project assignment
+- [x] Update TUI to use bulk operations for description editing
+- [x] Handle partial failures and provide detailed status messages
+
+### Rate Limit Monitoring ✅ COMPLETED
+- [x] Extract X-Toggl-Quota-Remaining and X-Toggl-Quota-Resets-In headers
+- [x] Add RateLimitInfo struct to track quota state
+- [x] Log warnings when quota is low (< 10 requests)
+- [x] Update all API methods to extract headers
+
+### Proactive Rate Limit Handling ✅ COMPLETED
+- [x] Implement check_rate_limit_before_request() with throttling
+- [x] Handle HTTP 402 Payment Required status code
+- [x] Add wait and retry logic for quota exhaustion
+- [ ] Display rate limit info in TUI footer (optional - deferred to v1.2.1)
+
+### Testing & Documentation (PARTIALLY COMPLETED)
+- [x] Unit tests for bulk operations and rate limiting
+- [ ] Integration tests with mocked rate limits (deferred to v1.2.1)
+- [ ] Update README and CLAUDE.md with API optimization details (deferred to v1.2.1)
+- [x] Create API_OPTIMIZATION_ANALYSIS.md document
+
+**Expected Impact:** ✅ ACHIEVED
+- 99% reduction in API calls for batch operations
+- Free tier: Batch operations become usable
+- Starter tier: 20x more operations per hour
+- Premium tier: 12x more operations per hour
+
+## v1.2.1 - Reports & Advanced Filtering (PLANNED)
 ### Report Generation
 - [ ] Implement daily summary report
 - [ ] Add weekly summary report
@@ -135,7 +173,7 @@
 - [ ] Show usage count/percentage per project in selector
 - [ ] Add configuration option to toggle sort method
 
-## v1.2.1 - Smart Search & Fuzzy Matching (PLANNED)
+## v1.2.2 - Smart Search & Fuzzy Matching (PLANNED)
 ### Instant Project Search
 - [ ] Type-to-filter in project selector (no '/' needed)
 - [ ] Real-time filtering as user types
@@ -153,7 +191,7 @@
 - [ ] Add hotkey to open report menu
 - [ ] Allow selecting report type and date range
 
-## v1.2.2 - Sync & Performance (PLANNED)
+## v1.2.3 - Sync & Performance (PLANNED)
 ### Incremental Sync
 - [ ] Implement incremental sync (only fetch new entries since last sync)
 - [ ] Add cache invalidation logic

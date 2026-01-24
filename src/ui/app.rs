@@ -437,71 +437,141 @@ impl App {
             return;
         }
 
+        if let Some(rate_limit_info) = client.get_rate_limit_info()
+            && let Some(remaining) = rate_limit_info.remaining
+        {
+            if remaining == 0 {
+                self.error_message = Some(format!(
+                    "API rate limit exhausted. Please wait {} seconds and try again.",
+                    rate_limit_info.resets_in.unwrap_or(60)
+                ));
+                self.show_edit_modal = false;
+                return;
+            } else if remaining < 5 {
+                self.status_message = Some(format!(
+                    "Warning: Only {} API requests remaining",
+                    remaining
+                ));
+            }
+        }
+
         self.show_edit_modal = false;
         self.edit_input.clear();
         self.edit_entry_ids.clear();
 
         tracing::info!(
-            "Updating description for {} entries",
+            "Using bulk API to update description for {} entries",
             entries_to_update.len()
         );
 
-        let (tx, rx) = std::sync::mpsc::channel();
+        let workspace_id = entries_to_update[0].0;
+        let entry_ids: Vec<i64> = entries_to_update.iter().map(|(_, id)| *id).collect();
 
-        for (workspace_id, entry_id) in entries_to_update.iter() {
+        let chunks: Vec<Vec<i64>> = entry_ids.chunks(100).map(|chunk| chunk.to_vec()).collect();
+
+        let mut success_count = 0;
+        let mut fail_count = 0;
+        let mut error_occurred = false;
+
+        for chunk in chunks {
+            tracing::debug!("Processing chunk of {} entries", chunk.len());
+
+            let (tx, rx) = std::sync::mpsc::channel();
             let client_clone = client.clone();
-            let db_clone = db.clone();
+            let chunk_clone = chunk.clone();
             let desc_clone = new_description.clone();
-            let tx_clone = tx.clone();
-            let workspace_id_clone = *workspace_id;
-            let entry_id_clone = *entry_id;
 
             handle.spawn(async move {
                 let result = client_clone
-                    .update_time_entry_description(
-                        workspace_id_clone,
-                        entry_id_clone,
-                        desc_clone.clone(),
-                    )
+                    .bulk_update_descriptions(workspace_id, &chunk_clone, desc_clone)
                     .await;
+                let _ = tx.send(result);
+            });
 
-                match result {
-                    Ok(_) => {
-                        if let Err(e) =
-                            db_clone.update_time_entry_description(entry_id_clone, desc_clone)
+            self.status_message = Some("Updating description...".to_string());
+
+            match rx.recv_timeout(std::time::Duration::from_secs(10)) {
+                Ok(Ok(bulk_result)) => {
+                    tracing::debug!(
+                        "Bulk description update completed: {} succeeded, {} failed",
+                        bulk_result.success.len(),
+                        bulk_result.failure.len()
+                    );
+
+                    for entry_id in &bulk_result.success {
+                        if let Some(time_entry) =
+                            self.time_entries.iter_mut().find(|e| e.id == *entry_id)
                         {
-                            let _ = tx_clone
-                                .send(Err(anyhow::anyhow!("Failed to update database: {}", e)));
+                            time_entry.description = Some(new_description.clone());
+                        }
+
+                        if let Some(all_entry) =
+                            self.all_entries.iter_mut().find(|e| e.id == *entry_id)
+                        {
+                            all_entry.description = Some(new_description.clone());
+                        }
+
+                        if let Err(e) =
+                            db.update_time_entry_description(*entry_id, new_description.clone())
+                        {
+                            tracing::error!(
+                                "Failed to update description in database for entry {}: {}",
+                                entry_id,
+                                e
+                            );
                         } else {
-                            let _ = tx_clone.send(Ok(entry_id_clone));
+                            tracing::debug!(
+                                "Successfully updated description in database for entry {}",
+                                entry_id
+                            );
                         }
                     }
-                    Err(e) => {
-                        let _ = tx_clone.send(Err(e));
+
+                    for failure in &bulk_result.failure {
+                        tracing::error!(
+                            "Failed to update entry {}: {}",
+                            failure.id,
+                            failure.message
+                        );
                     }
-                }
-            });
-        }
 
-        drop(tx);
-
-        let mut success_count = 0;
-        let mut error_occurred = false;
-
-        for _ in 0..entries_to_update.len() {
-            match rx.recv() {
-                Ok(Ok(_)) => {
-                    success_count += 1;
+                    success_count += bulk_result.success.len();
+                    fail_count += bulk_result.failure.len();
                 }
                 Ok(Err(e)) => {
-                    tracing::error!("Failed to update description: {}", e);
-                    self.error_message = Some(format!("Failed to update description: {}", e));
+                    tracing::error!("API error during bulk description update: {}", e);
+                    fail_count += chunk.len();
+                    let error_msg = e.to_string();
+                    if error_msg.contains("Rate limit") || error_msg.contains("429") {
+                        self.error_message = Some(
+                            "API rate limit exceeded. Please wait a few minutes and try again."
+                                .to_string(),
+                        );
+                    } else if error_msg.contains("Quota") || error_msg.contains("402") {
+                        self.error_message = Some(
+                            "API quota exceeded. Please wait for quota reset and try again."
+                                .to_string(),
+                        );
+                    } else {
+                        self.error_message = Some(format!("Failed to update description: {}", e));
+                    }
                     error_occurred = true;
                     break;
                 }
-                Err(e) => {
-                    tracing::error!("Channel error: {}", e);
-                    self.error_message = Some(format!("Error communicating with API task: {}", e));
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    tracing::warn!("API request timed out (likely due to rate limiting)");
+                    fail_count += chunk.len();
+                    self.error_message = Some(
+                        "Update timed out (API rate limit hit). The operation may still complete in the background. Please wait and refresh.".to_string(),
+                    );
+                    error_occurred = true;
+                    break;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    tracing::error!("Channel disconnected while waiting for API result");
+                    fail_count += chunk.len();
+                    self.error_message =
+                        Some("Lost connection to API task. Please try again.".to_string());
                     error_occurred = true;
                     break;
                 }
@@ -509,11 +579,20 @@ impl App {
         }
 
         if !error_occurred {
-            self.status_message = Some(format!(
-                "Successfully updated description for {} entr{}",
-                success_count,
-                if success_count == 1 { "y" } else { "ies" }
-            ));
+            if fail_count == 0 {
+                self.status_message = Some(format!(
+                    "Successfully updated description for {} entr{}",
+                    success_count,
+                    if success_count == 1 { "y" } else { "ies" }
+                ));
+            } else {
+                self.status_message = Some(format!(
+                    "Updated description for {}/{} entries ({} failed)",
+                    success_count,
+                    success_count + fail_count,
+                    fail_count
+                ));
+            }
 
             let updated_entry_ids: HashSet<i64> =
                 entries_to_update.iter().map(|(_, id)| *id).collect();
@@ -872,72 +951,139 @@ impl App {
                 }
             };
 
+            if let Some(rate_limit_info) = client.get_rate_limit_info()
+                && let Some(remaining) = rate_limit_info.remaining
+            {
+                if remaining == 0 {
+                    self.error_message = Some(format!(
+                        "API rate limit exhausted. Please wait {} seconds and try again.",
+                        rate_limit_info.resets_in.unwrap_or(60)
+                    ));
+                    self.show_project_selector = false;
+                    self.project_search_query.clear();
+                    self.reset_filtered_projects();
+                    return;
+                } else if remaining < 5 {
+                    self.status_message = Some(format!(
+                        "Warning: Only {} API requests remaining",
+                        remaining
+                    ));
+                }
+            }
+
+            let total_entries = grouped_entry.entries.len();
+            let entry_ids: Vec<i64> = grouped_entry.entries.iter().map(|e| e.id).collect();
+            let workspace_id = grouped_entry.entries[0].workspace_id;
+
+            tracing::info!(
+                "Using bulk API to assign project {} to {} entries in workspace {}",
+                project_id,
+                entry_ids.len(),
+                workspace_id
+            );
+
+            let chunks: Vec<Vec<i64>> = entry_ids.chunks(100).map(|chunk| chunk.to_vec()).collect();
+
             let mut success_count = 0;
             let mut fail_count = 0;
-            let total_entries = grouped_entry.entries.len();
 
-            for entry in &grouped_entry.entries {
-                tracing::debug!(
-                    "Assigning project {} to entry {} in workspace {}",
-                    project_id,
-                    entry.id,
-                    entry.workspace_id
-                );
-
-                tracing::debug!("Spawning async task for entry {}", entry.id);
+            for chunk in chunks {
+                tracing::debug!("Processing chunk of {} entries", chunk.len());
 
                 let (tx, rx) = std::sync::mpsc::channel();
                 let client_clone = client.clone();
-                let workspace_id = entry.workspace_id;
-                let entry_id = entry.id;
+                let chunk_clone = chunk.clone();
 
                 handle.spawn(async move {
                     let result = client_clone
-                        .update_time_entry_project(workspace_id, entry_id, Some(project_id))
+                        .bulk_assign_project(workspace_id, &chunk_clone, Some(project_id))
                         .await;
                     let _ = tx.send(result);
                 });
 
-                match rx.recv() {
-                    Ok(Ok(_)) => {
-                        tracing::debug!("Successfully assigned project to entry {}", entry.id);
-                        success_count += 1;
+                self.status_message = Some("Assigning project...".to_string());
 
-                        if let Some(time_entry) =
-                            self.time_entries.iter_mut().find(|e| e.id == entry.id)
-                        {
-                            time_entry.project_id = Some(project_id);
+                match rx.recv_timeout(std::time::Duration::from_secs(10)) {
+                    Ok(Ok(bulk_result)) => {
+                        tracing::debug!(
+                            "Bulk update completed: {} succeeded, {} failed",
+                            bulk_result.success.len(),
+                            bulk_result.failure.len()
+                        );
+
+                        for entry_id in &bulk_result.success {
+                            if let Some(time_entry) =
+                                self.time_entries.iter_mut().find(|e| e.id == *entry_id)
+                            {
+                                time_entry.project_id = Some(project_id);
+                            }
+
+                            if let Some(all_entry) =
+                                self.all_entries.iter_mut().find(|e| e.id == *entry_id)
+                            {
+                                all_entry.project_id = Some(project_id);
+                            }
+
+                            if let Err(e) = self
+                                .db
+                                .update_time_entry_project(*entry_id, Some(project_id))
+                            {
+                                tracing::error!(
+                                    "Failed to update project in database for entry {}: {}",
+                                    entry_id,
+                                    e
+                                );
+                            } else {
+                                tracing::debug!(
+                                    "Successfully updated project in database for entry {}",
+                                    entry_id
+                                );
+                            }
                         }
 
-                        if let Some(all_entry) =
-                            self.all_entries.iter_mut().find(|e| e.id == entry.id)
-                        {
-                            all_entry.project_id = Some(project_id);
-                        }
-
-                        if let Err(e) = self
-                            .db
-                            .update_time_entry_project(entry.id, Some(project_id))
-                        {
+                        for failure in &bulk_result.failure {
                             tracing::error!(
-                                "Failed to update project in database for entry {}: {}",
-                                entry.id,
-                                e
-                            );
-                        } else {
-                            tracing::debug!(
-                                "Successfully updated project in database for entry {}",
-                                entry.id
+                                "Failed to update entry {}: {}",
+                                failure.id,
+                                failure.message
                             );
                         }
+
+                        success_count += bulk_result.success.len();
+                        fail_count += bulk_result.failure.len();
                     }
                     Ok(Err(e)) => {
-                        tracing::error!("API error assigning project to entry {}: {}", entry.id, e);
-                        fail_count += 1;
+                        tracing::error!("API error during bulk assignment: {}", e);
+                        fail_count += chunk.len();
+                        let error_msg = e.to_string();
+                        if error_msg.contains("Rate limit") || error_msg.contains("429") {
+                            self.error_message = Some(
+                                "API rate limit exceeded. Please wait a few minutes and try again."
+                                    .to_string(),
+                            );
+                        } else if error_msg.contains("Quota") || error_msg.contains("402") {
+                            self.error_message = Some(
+                                "API quota exceeded. Please wait for quota reset and try again."
+                                    .to_string(),
+                            );
+                        } else {
+                            self.error_message = Some(format!("Failed to assign project: {}", e));
+                        }
                     }
-                    Err(e) => {
-                        tracing::error!("Channel error while waiting for API result: {}", e);
-                        fail_count += 1;
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        tracing::warn!(
+                            "Project assignment timed out (likely due to rate limiting)"
+                        );
+                        fail_count += chunk.len();
+                        self.error_message = Some(
+                            "Assignment timed out (API rate limit hit). The operation may still complete in the background. Please wait and refresh.".to_string(),
+                        );
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                        tracing::error!("Channel disconnected during project assignment");
+                        fail_count += chunk.len();
+                        self.error_message =
+                            Some("Lost connection to API task. Please try again.".to_string());
                     }
                 }
             }
