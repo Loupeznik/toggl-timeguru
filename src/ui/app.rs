@@ -472,6 +472,7 @@ impl App {
         let mut success_count = 0;
         let mut fail_count = 0;
         let mut error_occurred = false;
+        let mut successful_ids: HashSet<i64> = HashSet::new();
 
         for chunk in chunks {
             tracing::debug!("Processing chunk of {} entries", chunk.len());
@@ -499,6 +500,8 @@ impl App {
                     );
 
                     for entry_id in &bulk_result.success {
+                        successful_ids.insert(*entry_id);
+
                         if let Some(time_entry) =
                             self.time_entries.iter_mut().find(|e| e.id == *entry_id)
                         {
@@ -594,27 +597,8 @@ impl App {
                 ));
             }
 
-            let updated_entry_ids: HashSet<i64> =
-                entries_to_update.iter().map(|(_, id)| *id).collect();
-
-            for entry in self.time_entries.iter_mut() {
-                if updated_entry_ids.contains(&entry.id) {
-                    entry.description = Some(new_description.clone());
-                }
-            }
-
-            for entry in self.all_entries.iter_mut() {
-                if updated_entry_ids.contains(&entry.id) {
-                    entry.description = Some(new_description.clone());
-                }
-            }
-
             for entry in self.grouped_entries.iter_mut() {
-                if entry
-                    .entries
-                    .iter()
-                    .any(|e| updated_entry_ids.contains(&e.id))
-                {
+                if entry.entries.iter().any(|e| successful_ids.contains(&e.id)) {
                     entry.description = Some(new_description.clone());
                 }
             }
@@ -1069,6 +1053,7 @@ impl App {
                         } else {
                             self.error_message = Some(format!("Failed to assign project: {}", e));
                         }
+                        break;
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         tracing::warn!(
@@ -1078,12 +1063,14 @@ impl App {
                         self.error_message = Some(
                             "Assignment timed out (API rate limit hit). The operation may still complete in the background. Please wait and refresh.".to_string(),
                         );
+                        break;
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                         tracing::error!("Channel disconnected during project assignment");
                         fail_count += chunk.len();
                         self.error_message =
                             Some("Lost connection to API task. Please try again.".to_string());
+                        break;
                     }
                 }
             }

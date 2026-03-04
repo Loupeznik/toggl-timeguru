@@ -164,7 +164,13 @@ impl TogglClient {
                     .await
                     .context("Failed to parse user response")?;
                 info!("Successfully fetched user information");
-                debug!("User data: {:?}", user);
+                if let Some(obj) = user.as_object() {
+                    let safe_keys: Vec<&String> = obj
+                        .keys()
+                        .filter(|k| *k != "api_token" && *k != "api_token_last_four")
+                        .collect();
+                    debug!("User data keys: {:?}", safe_keys);
+                }
                 Ok(user)
             }
             StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => {
@@ -331,6 +337,8 @@ impl TogglClient {
             .await
             .context("Failed to fetch workspaces")?;
 
+        self.extract_rate_limit_headers(&response);
+
         match response.status() {
             StatusCode::OK => {
                 let workspaces = response
@@ -357,6 +365,8 @@ impl TogglClient {
             .await
             .context("Failed to fetch projects")?;
 
+        self.extract_rate_limit_headers(&response);
+
         match response.status() {
             StatusCode::OK => {
                 let projects = response
@@ -371,13 +381,14 @@ impl TogglClient {
         }
     }
 
-    #[allow(dead_code)]
     pub async fn update_time_entry_project(
         &self,
         workspace_id: i64,
         entry_id: i64,
         project_id: Option<i64>,
     ) -> Result<TimeEntry> {
+        self.check_rate_limit_before_request().await?;
+
         info!(
             "update_time_entry_project called: workspace={}, entry={}, project={:?}",
             workspace_id, entry_id, project_id
@@ -422,6 +433,8 @@ impl TogglClient {
             }
         };
 
+        self.extract_rate_limit_headers(&response);
+
         match response.status() {
             StatusCode::OK => {
                 let updated_entry = response
@@ -462,6 +475,8 @@ impl TogglClient {
         entry_id: i64,
         description: String,
     ) -> Result<TimeEntry> {
+        self.check_rate_limit_before_request().await?;
+
         info!(
             "update_time_entry_description called: workspace={}, entry={}, description='{}'",
             workspace_id, entry_id, description
@@ -502,6 +517,8 @@ impl TogglClient {
             }
         };
 
+        self.extract_rate_limit_headers(&response);
+
         match response.status() {
             StatusCode::OK => {
                 let updated_entry = response
@@ -540,6 +557,8 @@ impl TogglClient {
         workspace_id: i64,
         description: Option<String>,
     ) -> Result<TimeEntry> {
+        self.check_rate_limit_before_request().await?;
+
         info!(
             "start_time_entry called: workspace={}, description={:?}",
             workspace_id, description
@@ -594,6 +613,8 @@ impl TogglClient {
             }
         };
 
+        self.extract_rate_limit_headers(&response);
+
         match response.status() {
             StatusCode::OK | StatusCode::CREATED => {
                 let time_entry = response
@@ -625,6 +646,8 @@ impl TogglClient {
     }
 
     pub async fn stop_time_entry(&self, workspace_id: i64, entry_id: i64) -> Result<TimeEntry> {
+        self.check_rate_limit_before_request().await?;
+
         info!(
             "stop_time_entry called: workspace={}, entry_id={}",
             workspace_id, entry_id
@@ -655,6 +678,8 @@ impl TogglClient {
                 return Err(anyhow::anyhow!("Network error: {}", e));
             }
         };
+
+        self.extract_rate_limit_headers(&response);
 
         match response.status() {
             StatusCode::OK => {
@@ -707,6 +732,8 @@ impl TogglClient {
             .send()
             .await
             .context("Failed to send request to Toggl API")?;
+
+        self.extract_rate_limit_headers(&response);
 
         match response.status() {
             StatusCode::OK => {
