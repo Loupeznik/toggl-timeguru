@@ -347,7 +347,7 @@ impl App {
 
     fn sort_entries(&mut self) {
         if self.sort_by_date {
-            self.time_entries.sort_by(|a, b| a.start.cmp(&b.start));
+            self.time_entries.sort_by_key(|a| a.start);
         }
     }
 
@@ -358,7 +358,7 @@ impl App {
     fn toggle_sort_by_date(&mut self) {
         self.sort_by_date = !self.sort_by_date;
         if self.sort_by_date {
-            self.time_entries.sort_by(|a, b| a.start.cmp(&b.start));
+            self.time_entries.sort_by_key(|a| a.start);
         } else {
             let projects_vec: Vec<_> = self.projects.values().cloned().collect();
             self.time_entries = self
@@ -1283,8 +1283,10 @@ impl App {
                         .description
                         .clone()
                         .unwrap_or_else(|| "(No description)".to_string());
-                    let hours = if self.show_rounded && self.round_minutes.is_some() {
-                        entry.rounded_hours(self.round_minutes.unwrap())
+                    let hours = if let Some(round_to_minutes) = self.round_minutes
+                        && self.show_rounded
+                    {
+                        entry.rounded_hours(round_to_minutes)
                     } else {
                         entry.total_hours()
                     };
@@ -1338,8 +1340,9 @@ impl App {
                         .clone()
                         .unwrap_or_else(|| "(No description)".to_string());
 
-                    let duration_hours = if self.show_rounded && self.round_minutes.is_some() {
-                        let round_to_minutes = self.round_minutes.unwrap();
+                    let duration_hours = if let Some(round_to_minutes) = self.round_minutes
+                        && self.show_rounded
+                    {
                         let seconds_per_round = round_to_minutes * 60;
                         let rounded_duration = ((entry.duration as f64 / seconds_per_round as f64)
                             .ceil() as i64)

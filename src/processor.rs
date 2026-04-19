@@ -29,7 +29,7 @@ pub fn group_by_description(entries: Vec<TimeEntry>) -> Vec<GroupedTimeEntry> {
         })
         .collect();
 
-    grouped.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
+    grouped.sort_by_key(|g| std::cmp::Reverse(g.total_duration));
 
     grouped
 }
@@ -201,7 +201,7 @@ pub fn calculate_non_billable_duration(entries: &[TimeEntry]) -> i64 {
 
 #[allow(dead_code)]
 pub fn sort_by_date(mut entries: Vec<TimeEntry>) -> Vec<TimeEntry> {
-    entries.sort_by(|a, b| a.start.cmp(&b.start));
+    entries.sort_by_key(|a| a.start);
     entries
 }
 
@@ -464,7 +464,7 @@ mod tests {
             create_test_entry_with_date(3, "Task", 3600, Some(1), day2),
         ];
 
-        entries.sort_by(|a, b| a.start.cmp(&b.start));
+        entries.sort_by_key(|a| a.start);
         let grouped = group_by_description_and_day(entries);
 
         assert_eq!(grouped.len(), 3);
