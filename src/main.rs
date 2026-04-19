@@ -97,6 +97,7 @@ async fn main() -> Result<()> {
                 offline,
                 round,
                 round_minutes,
+                round_mode,
             } => {
                 handle_report(
                     period,
@@ -106,6 +107,7 @@ async fn main() -> Result<()> {
                     offline,
                     round,
                     round_minutes,
+                    round_mode,
                     cli.api_token,
                 )
                 .await?
@@ -247,11 +249,13 @@ async fn handle_report(
     offline: bool,
     round: bool,
     round_minutes_flag: Option<i64>,
+    round_mode: String,
     cli_api_token: Option<String>,
 ) -> Result<()> {
     use std::str::FromStr;
 
     let report_period = report::ReportPeriod::from_str(&period)?;
+    let rounding_mode = report::RoundingMode::from_str(&round_mode)?;
     let config = Config::load()?;
     let db = Database::new(None)?;
 
@@ -311,6 +315,7 @@ async fn handle_report(
         start_date,
         end_date,
         round_minutes,
+        rounding_mode,
     );
     report::print_text(&report);
 

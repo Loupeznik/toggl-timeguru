@@ -11,6 +11,36 @@ pub enum ReportPeriod {
     Monthly,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RoundingMode {
+    #[default]
+    Total,
+    Entry,
+}
+
+impl RoundingMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Total => "per total",
+            Self::Entry => "per entry",
+        }
+    }
+}
+
+impl FromStr for RoundingMode {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "total" | "totals" | "aggregate" => Ok(Self::Total),
+            "entry" | "entries" | "per-entry" => Ok(Self::Entry),
+            other => Err(anyhow::anyhow!(
+                "invalid round mode '{other}', expected 'total' or 'entry'"
+            )),
+        }
+    }
+}
+
 impl ReportPeriod {
     pub fn label(self) -> &'static str {
         match self {
@@ -67,6 +97,7 @@ pub struct Report {
     pub by_project: Vec<ProjectSummary>,
     pub by_period: Vec<PeriodBucket>,
     pub round_minutes: Option<i64>,
+    pub round_mode: RoundingMode,
 }
 
 fn bucket_key(start: DateTime<Utc>, period: ReportPeriod) -> (String, DateTime<Utc>) {
@@ -129,12 +160,12 @@ fn project_name(project_id: Option<i64>, projects: &HashMap<i64, Project>) -> St
 }
 
 fn aggregate_by_project(
-    entries: &[&TimeEntry],
+    entries: &[(&TimeEntry, i64)],
     projects: &HashMap<i64, Project>,
 ) -> Vec<ProjectSummary> {
     let mut map: HashMap<Option<i64>, ProjectSummary> = HashMap::new();
-    for entry in entries {
-        if entry.duration <= 0 {
+    for (entry, dur) in entries {
+        if *dur <= 0 {
             continue;
         }
         let summary = map
@@ -146,11 +177,11 @@ fn aggregate_by_project(
                 billable_duration: 0,
                 non_billable_duration: 0,
             });
-        summary.duration += entry.duration;
+        summary.duration += *dur;
         if entry.billable {
-            summary.billable_duration += entry.duration;
+            summary.billable_duration += *dur;
         } else {
-            summary.non_billable_duration += entry.duration;
+            summary.non_billable_duration += *dur;
         }
     }
     let mut out: Vec<ProjectSummary> = map.into_values().collect();
@@ -171,42 +202,52 @@ pub fn generate(
     start_date: DateTime<Utc>,
     end_date: DateTime<Utc>,
     round_minutes: Option<i64>,
+    round_mode: RoundingMode,
 ) -> Report {
     let projects_map: HashMap<i64, Project> = projects.iter().map(|p| (p.id, p.clone())).collect();
 
-    let valid: Vec<&TimeEntry> = entries
+    let duration_for = |raw: i64| -> i64 {
+        match round_mode {
+            RoundingMode::Entry => round_seconds_up(raw, round_minutes),
+            RoundingMode::Total => raw,
+        }
+    };
+
+    let valid: Vec<(&TimeEntry, i64)> = entries
         .iter()
         .filter(|e| e.duration > 0 && e.start >= start_date && e.start <= end_date)
+        .map(|e| (e, duration_for(e.duration)))
         .collect();
 
-    let total_duration: i64 = valid.iter().map(|e| e.duration).sum();
+    let total_duration: i64 = valid.iter().map(|(_, d)| *d).sum();
     let billable_duration: i64 = valid
         .iter()
-        .filter(|e| e.billable)
-        .map(|e| e.duration)
+        .filter(|(e, _)| e.billable)
+        .map(|(_, d)| *d)
         .sum();
     let non_billable_duration = total_duration - billable_duration;
 
     let by_project = aggregate_by_project(&valid, &projects_map);
 
-    let mut bucket_groups: HashMap<String, (DateTime<Utc>, Vec<&TimeEntry>)> = HashMap::new();
-    for entry in &valid {
+    type BucketEntries<'a> = (DateTime<Utc>, Vec<(&'a TimeEntry, i64)>);
+    let mut bucket_groups: HashMap<String, BucketEntries> = HashMap::new();
+    for (entry, dur) in &valid {
         let (label, sort_dt) = bucket_key(entry.start, period);
         bucket_groups
             .entry(label)
             .or_insert_with(|| (sort_dt, Vec::new()))
             .1
-            .push(entry);
+            .push((entry, *dur));
     }
 
     let mut buckets_with_sort: Vec<(DateTime<Utc>, PeriodBucket)> = bucket_groups
         .into_iter()
         .map(|(label, (sort_dt, bucket_entries))| {
-            let duration: i64 = bucket_entries.iter().map(|e| e.duration).sum();
+            let duration: i64 = bucket_entries.iter().map(|(_, d)| *d).sum();
             let bucket_billable: i64 = bucket_entries
                 .iter()
-                .filter(|e| e.billable)
-                .map(|e| e.duration)
+                .filter(|(e, _)| e.billable)
+                .map(|(_, d)| *d)
                 .sum();
             let bucket_non_billable = duration - bucket_billable;
             let by_project = aggregate_by_project(&bucket_entries, &projects_map);
@@ -236,6 +277,7 @@ pub fn generate(
         by_project,
         by_period,
         round_minutes,
+        round_mode,
     }
 }
 
@@ -267,9 +309,14 @@ fn pct(part: i64, total: i64) -> f64 {
 pub fn print_text(report: &Report) {
     let start_local = report.start_date.with_timezone(&Local);
     let end_local = report.end_date.with_timezone(&Local);
-    let round = report.round_minutes;
-    let round_suffix = round
-        .map(|m| format!(" (rounded up to {m} min)"))
+    let display_round = if report.round_mode == RoundingMode::Total {
+        report.round_minutes
+    } else {
+        None
+    };
+    let round_suffix = report
+        .round_minutes
+        .map(|m| format!(" (rounded up to {m} min, {})", report.round_mode.label()))
         .unwrap_or_default();
 
     println!(
@@ -288,10 +335,10 @@ pub fn print_text(report: &Report) {
 
     println!(
         "Total: {}  │  Billable: {} ({:.0}%)  │  Non-billable: {} ({:.0}%)  │  Entries: {}",
-        format_hours(report.total_duration, round),
-        format_hours(report.billable_duration, round),
+        format_hours(report.total_duration, display_round),
+        format_hours(report.billable_duration, display_round),
         pct(report.billable_duration, report.total_duration),
-        format_hours(report.non_billable_duration, round),
+        format_hours(report.non_billable_duration, display_round),
         pct(report.non_billable_duration, report.total_duration),
         report.entry_count,
     );
@@ -306,10 +353,10 @@ pub fn print_text(report: &Report) {
         println!(
             "  {:<40} {:>10} {:>7.0}% {:>10} {:>10}",
             truncate(&p.project_name, 40),
-            format_hours(p.duration, round),
+            format_hours(p.duration, display_round),
             pct(p.duration, report.total_duration),
-            format_hours(p.billable_duration, round),
-            format_hours(p.non_billable_duration, round),
+            format_hours(p.billable_duration, display_round),
+            format_hours(p.non_billable_duration, display_round),
         );
     }
 
@@ -323,15 +370,15 @@ pub fn print_text(report: &Report) {
         println!(
             "  {:<22} {:>10} {:>10} {:>10}",
             bucket.label,
-            format_hours(bucket.duration, round),
-            format_hours(bucket.billable_duration, round),
-            format_hours(bucket.non_billable_duration, round),
+            format_hours(bucket.duration, display_round),
+            format_hours(bucket.billable_duration, display_round),
+            format_hours(bucket.non_billable_duration, display_round),
         );
         for p in bucket.by_project.iter().take(5) {
             println!(
                 "      {:<36} {:>10} {:>7.0}%",
                 truncate(&p.project_name, 36),
-                format_hours(p.duration, round),
+                format_hours(p.duration, display_round),
                 pct(p.duration, bucket.duration),
             );
         }
@@ -420,7 +467,15 @@ mod tests {
             entry(3, d2, 7200, Some(2), true),
         ];
         let projects = vec![project(1, "A"), project(2, "B")];
-        let report = generate(&entries, &projects, ReportPeriod::Daily, d1, d2, None);
+        let report = generate(
+            &entries,
+            &projects,
+            ReportPeriod::Daily,
+            d1,
+            d2,
+            None,
+            RoundingMode::Total,
+        );
 
         assert_eq!(report.total_duration, 3600 + 1800 + 7200);
         assert_eq!(report.billable_duration, 3600 + 7200);
@@ -439,7 +494,15 @@ mod tests {
             entry(2, fri, 1800, Some(1), true),
         ];
         let projects = vec![project(1, "A")];
-        let report = generate(&entries, &projects, ReportPeriod::Weekly, wed, fri, None);
+        let report = generate(
+            &entries,
+            &projects,
+            ReportPeriod::Weekly,
+            wed,
+            fri,
+            None,
+            RoundingMode::Total,
+        );
         assert_eq!(report.by_period.len(), 1);
         assert_eq!(report.by_period[0].duration, 5400);
     }
@@ -452,7 +515,15 @@ mod tests {
             entry(2, d, 3600, Some(1), true),
         ];
         let projects = vec![project(1, "A")];
-        let report = generate(&entries, &projects, ReportPeriod::Daily, d, d, None);
+        let report = generate(
+            &entries,
+            &projects,
+            ReportPeriod::Daily,
+            d,
+            d,
+            None,
+            RoundingMode::Total,
+        );
         assert_eq!(report.entry_count, 1);
         assert_eq!(report.total_duration, 3600);
     }
@@ -480,5 +551,55 @@ mod tests {
         );
         assert_eq!(ReportPeriod::from_str("m").unwrap(), ReportPeriod::Monthly);
         assert!(ReportPeriod::from_str("yearly").is_err());
+    }
+
+    #[test]
+    fn round_mode_parses_aliases() {
+        assert_eq!(
+            RoundingMode::from_str("total").unwrap(),
+            RoundingMode::Total
+        );
+        assert_eq!(
+            RoundingMode::from_str("ENTRIES").unwrap(),
+            RoundingMode::Entry
+        );
+        assert!(RoundingMode::from_str("bucket").is_err());
+    }
+
+    #[test]
+    fn per_entry_rounding_differs_from_total_rounding() {
+        let d = Utc.with_ymd_and_hms(2026, 4, 1, 9, 0, 0).unwrap();
+        // Two entries, 60s each = 120s raw. Total-round to 15min → 900s. Entry-round → 2 × 900s = 1800s.
+        let entries = vec![
+            entry(1, d, 60, Some(1), true),
+            entry(2, d, 60, Some(1), true),
+        ];
+        let projects = vec![project(1, "A")];
+
+        let totals_report = generate(
+            &entries,
+            &projects,
+            ReportPeriod::Daily,
+            d,
+            d,
+            Some(15),
+            RoundingMode::Total,
+        );
+        // Raw aggregation; display-time rounding is applied by print_text.
+        assert_eq!(totals_report.total_duration, 120);
+
+        let entry_report = generate(
+            &entries,
+            &projects,
+            ReportPeriod::Daily,
+            d,
+            d,
+            Some(15),
+            RoundingMode::Entry,
+        );
+        // Per-entry ceil to 15min: 60s → 900s each, sum = 1800s.
+        assert_eq!(entry_report.total_duration, 1800);
+        assert_eq!(entry_report.by_project[0].duration, 1800);
+        assert_eq!(entry_report.by_period[0].duration, 1800);
     }
 }

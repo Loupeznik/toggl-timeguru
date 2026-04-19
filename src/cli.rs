@@ -115,6 +115,14 @@ pub enum Commands {
             help = "Round durations up to this many minutes (implies --round)"
         )]
         round_minutes: Option<i64>,
+
+        #[arg(
+            long,
+            default_value = "total",
+            value_name = "MODE",
+            help = "Rounding mode: total (round aggregated totals) | entry (round each entry then sum)"
+        )]
+        round_mode: String,
     },
 
     #[command(about = "Delete application data (database and/or config)")]
