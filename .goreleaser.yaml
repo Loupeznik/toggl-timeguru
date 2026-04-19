@@ -128,7 +128,6 @@ snapcrafts:
           - home
           - network
           - network-bind
-          - removable-media
 
 checksum:
   name_template: "checksums.txt"
@@ -144,3 +143,4 @@ changelog:
       - "^test:"
       - "^ci:"
       - "^chore:"
+      - "^changelog:"
