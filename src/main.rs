@@ -2,6 +2,7 @@ mod cli;
 mod config;
 mod db;
 mod processor;
+mod report;
 mod toggl;
 mod ui;
 
@@ -87,6 +88,14 @@ async fn main() -> Result<()> {
             Commands::Sync { start, end } => handle_sync(start, end, cli.api_token).await?,
 
             Commands::Tui { start, end } => handle_tui(start, end, cli.api_token).await?,
+
+            Commands::Report {
+                period,
+                project,
+                start,
+                end,
+                offline,
+            } => handle_report(period, project, start, end, offline, cli.api_token).await?,
 
             Commands::Clean {
                 all,
@@ -211,6 +220,52 @@ async fn handle_config(
             config.api_token_encrypted.is_some()
         );
     }
+
+    Ok(())
+}
+
+async fn handle_report(
+    period: String,
+    project: Option<i64>,
+    start: Option<String>,
+    end: Option<String>,
+    offline: bool,
+    cli_api_token: Option<String>,
+) -> Result<()> {
+    use std::str::FromStr;
+
+    let report_period = report::ReportPeriod::from_str(&period)?;
+    let config = Config::load()?;
+    let db = Database::new(None)?;
+
+    let end_date = if let Some(end_str) = end {
+        Cli::parse_date(&end_str)?
+    } else {
+        Utc::now()
+    };
+    let start_date = if let Some(start_str) = start {
+        Cli::parse_date(&start_str)?
+    } else {
+        end_date - config.default_date_range()
+    };
+
+    let mut entries = if offline {
+        db.get_time_entries(start_date, end_date, config.current_user_id)?
+    } else {
+        let api_token = get_api_token(cli_api_token, &config)?;
+        let client = TogglClient::new(api_token)?;
+        let fetched = client.get_time_entries(start_date, end_date).await?;
+        db.save_time_entries(&fetched)?;
+        fetched
+    };
+
+    if let Some(project_id) = project {
+        entries = filter_by_project(entries, project_id);
+    }
+
+    let projects = db.get_projects().unwrap_or_default();
+    let report = report::generate(&entries, &projects, report_period, start_date, end_date);
+    report::print_text(&report);
 
     Ok(())
 }

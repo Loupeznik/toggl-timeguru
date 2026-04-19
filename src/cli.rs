@@ -81,6 +81,29 @@ pub enum Commands {
         end: Option<String>,
     },
 
+    #[command(about = "Generate a summary report for a date range")]
+    Report {
+        #[arg(
+            short,
+            long,
+            default_value = "daily",
+            help = "Bucket period: daily | weekly | monthly"
+        )]
+        period: String,
+
+        #[arg(short = 'P', long, help = "Filter by project id")]
+        project: Option<i64>,
+
+        #[arg(short, long, help = "Start date (ISO 8601 or YYYY-MM-DD)")]
+        start: Option<String>,
+
+        #[arg(short, long, help = "End date (ISO 8601 or YYYY-MM-DD)")]
+        end: Option<String>,
+
+        #[arg(long, help = "Use cached data (offline mode)")]
+        offline: bool,
+    },
+
     #[command(about = "Delete application data (database and/or config)")]
     Clean {
         #[arg(long, help = "Delete all data (database + config)")]

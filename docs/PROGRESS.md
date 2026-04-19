@@ -231,23 +231,21 @@ This document tracks the development progress across all phases of the Toggl Tim
 - Starter tier: 20x more operations per hour ✅ ACHIEVED
 - Premium tier: 12x more operations per hour ✅ ACHIEVED
 
-### v1.2.1 Report Generation (PLANNED)
-- [ ] Implement daily summary report
-  - [ ] Show total hours worked per day
-  - [ ] Group by project with subtotals
-  - [ ] Include billable vs non-billable breakdown
-- [ ] Add weekly summary report
-  - [ ] Weekly totals by project
-  - [ ] Daily breakdown within week
-- [ ] Create monthly summary report
-  - [ ] Monthly totals by project
-  - [ ] Weekly breakdown within month
-- [ ] Add project-specific reports
-  - [ ] Filter by single project
-  - [ ] Show detailed breakdown
-- [ ] Calculate billable vs non-billable hours
-  - [ ] Add to all report types
-  - [ ] Show percentages
+### v1.2.1 Report Generation (COMPLETED)
+- [x] Implement daily summary report
+  - [x] Show total hours worked per day
+  - [x] Group by project with subtotals
+  - [x] Include billable vs non-billable breakdown
+- [x] Add weekly summary report
+  - [x] Weekly totals by project (ISO week label, Monday-start)
+  - [x] Daily breakdown within week (top-5 projects per bucket)
+- [x] Add monthly summary report
+  - [x] Monthly totals by project
+- [x] Add project-specific reports
+  - [x] Filter by single project via `--project <id>`
+- [x] Calculate billable vs non-billable hours
+  - [x] Added to all report types
+  - [x] Shows percentages of total
 
 ### v1.2.1 Interactive TUI Filtering (IN PROGRESS)
 - [x] Add project filtering UI to TUI filter panel
@@ -278,6 +276,8 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [x] Jump to project by first-letter key in selector
   - [x] Press any alphanumeric key to jump to first project starting with that letter
   - [x] Works when search query is empty; does not interfere with navigation keys
+  - [x] Repeated presses cycle through matches, wrapping at the end
+- [x] `c` hotkey in main entry list clears all active filters without opening the panel
 
 ### v1.2.2 Instant Project Search (PLANNED)
 - [ ] Type-to-filter in project selector (no '/' needed)
