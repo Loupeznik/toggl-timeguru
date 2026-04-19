@@ -1,0 +1,6 @@
+FROM gcr.io/distroless/cc-debian12:nonroot
+ARG TARGETPLATFORM
+COPY $TARGETPLATFORM/toggl-timeguru /usr/local/bin/toggl-timeguru
+COPY LICENSE /
+USER nonroot:nonroot
+ENTRYPOINT ["/usr/local/bin/toggl-timeguru"]

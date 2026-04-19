@@ -1,0 +1,146 @@
+version: 2
+
+project_name: toggl-timeguru
+
+before:
+  hooks:
+    - cargo fetch --locked
+
+builds:
+  - id: toggl-timeguru
+    builder: rust
+    binary: toggl-timeguru
+    targets:
+      - x86_64-unknown-linux-gnu
+      - aarch64-unknown-linux-gnu
+      - x86_64-apple-darwin
+      - aarch64-apple-darwin
+      - x86_64-pc-windows-gnu
+
+archives:
+  - id: toggl-timeguru
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - docs/**/*
+
+dockers_v2:
+  - id: toggl-timeguru
+    ids:
+      - toggl-timeguru
+    dockerfile: Dockerfile.goreleaser
+    images:
+      - ghcr.io/loupeznik/toggl-timeguru
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.source: https://github.com/Loupeznik/toggl-timeguru
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.description: CLI + TUI for managing and analyzing Toggl Track time entries
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .Commit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.licenses: MIT
+    extra_files:
+      - LICENSE
+
+docker_signs:
+  - cmd: cosign
+    artifacts: all
+    args:
+      - sign
+      - --yes
+      - "${artifact}@${digest}"
+
+homebrew_casks:
+  - name: toggl-timeguru
+    ids:
+      - toggl-timeguru
+    binaries: [toggl-timeguru]
+    directory: Casks
+    repository:
+      owner: Loupeznik
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/Loupeznik/toggl-timeguru"
+    description: "CLI + TUI for managing and analyzing Toggl Track time entries"
+    license: "MIT"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    # Strip macOS Gatekeeper quarantine xattr on the unsigned binary so
+    # Gatekeeper doesn't refuse to run it on the user's Mac after download.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/toggl-timeguru"]
+          end
+    skip_upload: auto
+
+aurs:
+  - name: toggl-timeguru-bin
+    ids:
+      - toggl-timeguru
+    homepage: "https://github.com/Loupeznik/toggl-timeguru"
+    description: "CLI + TUI for managing and analyzing Toggl Track time entries"
+    maintainers:
+      - 'Dominik Zarsky <dzarsky@dzarsky.eu>'
+    license: "MIT"
+    private_key: "{{ .Env.AUR_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/toggl-timeguru-bin.git"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    package: |-
+      install -Dm755 "./toggl-timeguru" "${pkgdir}/usr/bin/toggl-timeguru"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+
+snapcrafts:
+  - id: toggl-timeguru
+    ids:
+      - toggl-timeguru
+    name: toggl-timeguru
+    title: Toggl TimeGuru
+    publish: true
+    summary: CLI + TUI for managing and analyzing Toggl Track time entries
+    description: |
+      Toggl TimeGuru is a Rust CLI and TUI that wraps the Toggl Track API with a
+      local SQLite cache, grouping, rounding, reports, filtering, bulk project
+      assignment, and more. It runs fully offline once synced.
+    license: MIT
+    grade: stable
+    confinement: strict
+    base: core22
+    apps:
+      toggl-timeguru:
+        command: toggl-timeguru
+        plugs:
+          - home
+          - network
+          - network-bind
+          - removable-media
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
