@@ -172,7 +172,10 @@ pub fn generate(
 ) -> Report {
     let projects_map: HashMap<i64, Project> = projects.iter().map(|p| (p.id, p.clone())).collect();
 
-    let valid: Vec<&TimeEntry> = entries.iter().filter(|e| e.duration > 0).collect();
+    let valid: Vec<&TimeEntry> = entries
+        .iter()
+        .filter(|e| e.duration > 0 && e.start >= start_date && e.start <= end_date)
+        .collect();
 
     let total_duration: i64 = valid.iter().map(|e| e.duration).sum();
     let billable_duration: i64 = valid
@@ -246,11 +249,13 @@ fn pct(part: i64, total: i64) -> f64 {
 }
 
 pub fn print_text(report: &Report) {
+    let start_local = report.start_date.with_timezone(&Local);
+    let end_local = report.end_date.with_timezone(&Local);
     println!(
         "\n{} Report — {} to {}",
         report.period.label(),
-        report.start_date.format("%Y-%m-%d"),
-        report.end_date.format("%Y-%m-%d"),
+        start_local.format("%Y-%m-%d"),
+        end_local.format("%Y-%m-%d"),
     );
     println!("{}", "─".repeat(70));
 

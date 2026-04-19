@@ -59,14 +59,12 @@ impl FilterSection {
 fn sort_projects(projects: &mut [Project], method: ProjectSortMethod, usage: &HashMap<i64, usize>) {
     match method {
         ProjectSortMethod::Name => {
-            projects.sort_by_key(|p| p.name.to_lowercase());
+            projects.sort_by_cached_key(|p| p.name.to_lowercase());
         }
         ProjectSortMethod::Usage => {
-            projects.sort_by(|a, b| {
-                let ua = usage.get(&a.id).copied().unwrap_or(0);
-                let ub = usage.get(&b.id).copied().unwrap_or(0);
-                ub.cmp(&ua)
-                    .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            projects.sort_by_cached_key(|p| {
+                let count = usage.get(&p.id).copied().unwrap_or(0);
+                (std::cmp::Reverse(count), p.name.to_lowercase())
             });
         }
     }
@@ -141,15 +139,13 @@ impl App {
             project_selector_state.select(Some(0));
         }
 
-        let mut available_tags: Vec<String> = HashSet::<String>::from_iter(
-            all_entries
-                .iter()
-                .filter_map(|e| e.tags.as_ref())
-                .flatten()
-                .map(|t| t.to_lowercase()),
-        )
-        .into_iter()
-        .collect();
+        let available_tags_set: HashSet<String> = all_entries
+            .iter()
+            .filter_map(|e| e.tags.as_ref())
+            .flatten()
+            .map(|t| t.to_lowercase())
+            .collect();
+        let mut available_tags: Vec<String> = available_tags_set.iter().cloned().collect();
         available_tags.sort();
 
         let mut active_filter = TimeEntryFilter::new();
@@ -160,7 +156,7 @@ impl App {
         }
         for tag in saved_filter.tags {
             let lower = tag.to_lowercase();
-            if available_tags.contains(&lower) {
+            if available_tags_set.contains(&lower) {
                 active_filter.tags.insert(lower);
             }
         }
