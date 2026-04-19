@@ -17,7 +17,7 @@ use std::io;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use cli::{Cli, Commands, TrackAction};
-use config::Config;
+use config::{Config, ProjectSortMethod};
 use db::Database;
 use processor::{
     filter_by_project, filter_by_tag, group_by_description, group_by_description_and_day,
@@ -62,8 +62,18 @@ async fn main() -> Result<()> {
                 set_token,
                 set_date_range,
                 set_round_minutes,
+                set_project_sort,
                 show,
-            } => handle_config(set_token, set_date_range, set_round_minutes, show).await?,
+            } => {
+                handle_config(
+                    set_token,
+                    set_date_range,
+                    set_round_minutes,
+                    set_project_sort,
+                    show,
+                )
+                .await?
+            }
 
             Commands::List {
                 start,
@@ -153,8 +163,10 @@ async fn handle_config(
     set_token: Option<String>,
     set_date_range: Option<i64>,
     set_round_minutes: Option<i64>,
+    set_project_sort: Option<String>,
     show: bool,
 ) -> Result<()> {
+    use std::str::FromStr;
     let mut config = Config::load()?;
 
     if let Some(token) = set_token {
@@ -175,6 +187,13 @@ async fn handle_config(
         println!("Rounding duration set to {} minutes", minutes);
     }
 
+    if let Some(method_str) = set_project_sort {
+        let method = ProjectSortMethod::from_str(&method_str)?;
+        config.project_sort_method = method;
+        config.save()?;
+        println!("Project sort method set to {:?}", method);
+    }
+
     if show {
         println!("\nCurrent Configuration:");
         println!(
@@ -186,6 +205,7 @@ async fn handle_config(
             "  Round duration: {:?} minutes",
             config.round_duration_minutes
         );
+        println!("  Project sort method: {:?}", config.project_sort_method);
         println!(
             "  API token configured: {}",
             config.api_token_encrypted.is_some()
@@ -403,6 +423,17 @@ async fn handle_tui(
 
     let projects = db.get_projects().unwrap_or_default();
 
+    let usage_window_start = Utc::now() - Duration::days(30);
+    let usage_entries = db
+        .get_time_entries(usage_window_start, Utc::now(), config.current_user_id)
+        .unwrap_or_default();
+    let mut project_usage: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+    for entry in &usage_entries {
+        if let Some(pid) = entry.project_id {
+            *project_usage.entry(pid).or_insert(0) += 1;
+        }
+    }
+
     let client = match get_api_token(cli_api_token, &config) {
         Ok(token) => match TogglClient::new(token) {
             Ok(c) => Some(std::sync::Arc::new(c)),
@@ -429,6 +460,8 @@ async fn handle_tui(
         runtime_handle,
         config.current_user_email.clone(),
         db,
+        project_usage,
+        config.project_sort_method,
     );
     let grouped = group_by_description(app.time_entries.clone());
     app.grouped_entries = grouped;

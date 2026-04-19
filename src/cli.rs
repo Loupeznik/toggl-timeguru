@@ -31,6 +31,13 @@ pub enum Commands {
         #[arg(long, help = "Set rounding duration in minutes")]
         set_round_minutes: Option<i64>,
 
+        #[arg(
+            long,
+            help = "Set project selector sort method (name or usage)",
+            value_name = "METHOD"
+        )]
+        set_project_sort: Option<String>,
+
         #[arg(long, help = "Show current configuration")]
         show: bool,
     },

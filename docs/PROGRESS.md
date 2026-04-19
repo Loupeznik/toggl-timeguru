@@ -265,17 +265,17 @@ This document tracks the development progress across all phases of the Toggl Tim
   - [ ] Badge showing filter count
   - [ ] Highlight filtered entries
 
-### v1.2.1 Project Selector Enhancements (PLANNED)
-- [ ] Sort projects by usage in last month
-  - [ ] Count time entries per project in last 30 days
-  - [ ] Sort by entry count (most used first)
-  - [ ] Show usage count in selector
-- [ ] Show usage statistics per project
-  - [ ] Display percentage of total time
-  - [ ] Show entry count
-- [ ] Add configuration option to toggle sort method
-  - [ ] Sort by name (default/existing)
-  - [ ] Sort by usage (new option)
+### v1.2.1 Project Selector Enhancements (IN PROGRESS)
+- [x] Sort projects by usage in last month
+  - [x] Count time entries per project in last 30 days
+  - [x] Sort by entry count (most used first)
+  - [x] Show usage count in selector
+- [x] Show usage statistics per project
+  - [x] Display percentage of total time
+  - [x] Show entry count
+- [x] Add configuration option to toggle sort method
+  - [x] Sort by name (default/existing)
+  - [x] Sort by usage (new option, via `config --set-project-sort usage`)
 - [x] Jump to project by first-letter key in selector
   - [x] Press any alphanumeric key to jump to first project starting with that letter
   - [x] Works when search query is empty; does not interfere with navigation keys

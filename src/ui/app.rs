@@ -11,6 +11,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
+use crate::config::ProjectSortMethod;
 use crate::processor::TimeEntryFilter;
 use crate::toggl::TogglClient;
 use crate::toggl::models::{GroupedTimeEntry, Project, TimeEntry};
@@ -21,6 +22,22 @@ const PAGE_SIZE: usize = 10;
 const POPUP_MARGIN: u16 = 10;
 const POPUP_MAX_WIDTH: u16 = 80;
 const POPUP_MAX_HEIGHT: u16 = 20;
+
+fn sort_projects(projects: &mut [Project], method: ProjectSortMethod, usage: &HashMap<i64, usize>) {
+    match method {
+        ProjectSortMethod::Name => {
+            projects.sort_by_key(|p| p.name.to_lowercase());
+        }
+        ProjectSortMethod::Usage => {
+            projects.sort_by(|a, b| {
+                let ua = usage.get(&a.id).copied().unwrap_or(0);
+                let ub = usage.get(&b.id).copied().unwrap_or(0);
+                ub.cmp(&ua)
+                    .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            });
+        }
+    }
+}
 
 pub struct App {
     pub time_entries: Vec<TimeEntry>,
@@ -52,6 +69,9 @@ pub struct App {
     pub runtime_handle: Option<tokio::runtime::Handle>,
     pub current_user_email: Option<String>,
     pub db: Arc<crate::db::Database>,
+    pub project_usage: HashMap<i64, usize>,
+    pub project_usage_total: usize,
+    pub project_sort_method: ProjectSortMethod,
 }
 
 impl App {
@@ -66,6 +86,8 @@ impl App {
         runtime_handle: Option<tokio::runtime::Handle>,
         current_user_email: Option<String>,
         db: Arc<crate::db::Database>,
+        project_usage: HashMap<i64, usize>,
+        project_sort_method: ProjectSortMethod,
     ) -> Self {
         let mut list_state = ListState::default();
         if !time_entries.is_empty() {
@@ -74,8 +96,9 @@ impl App {
 
         let projects_map: HashMap<i64, Project> =
             projects.iter().map(|p| (p.id, p.clone())).collect();
+        let project_usage_total: usize = project_usage.values().sum();
         let mut filtered_projects = projects.clone();
-        filtered_projects.sort_by(|a, b| a.name.cmp(&b.name));
+        sort_projects(&mut filtered_projects, project_sort_method, &project_usage);
 
         let all_entries = time_entries.clone();
 
@@ -114,6 +137,9 @@ impl App {
             runtime_handle,
             current_user_email,
             db,
+            project_usage,
+            project_usage_total,
+            project_sort_method,
         }
     }
 
@@ -848,7 +874,11 @@ impl App {
             .filter(|p| p.name.to_lowercase().contains(&query))
             .collect();
 
-        self.filtered_projects.sort_by(|a, b| a.name.cmp(&b.name));
+        sort_projects(
+            &mut self.filtered_projects,
+            self.project_sort_method,
+            &self.project_usage,
+        );
 
         if !self.filtered_projects.is_empty() {
             self.project_selector_state.select(Some(0));
@@ -859,7 +889,11 @@ impl App {
 
     fn reset_filtered_projects(&mut self) {
         self.filtered_projects = self.projects.values().cloned().collect();
-        self.filtered_projects.sort_by(|a, b| a.name.cmp(&b.name));
+        sort_projects(
+            &mut self.filtered_projects,
+            self.project_sort_method,
+            &self.project_usage,
+        );
 
         if !self.filtered_projects.is_empty() {
             self.project_selector_state.select(Some(0));
@@ -1470,7 +1504,7 @@ impl App {
             .iter()
             .map(|project| {
                 let color = Self::parse_color(&project.color);
-                let spans = vec![
+                let mut spans = vec![
                     Span::styled(
                         format!("[{}]", project.name),
                         Style::default().fg(color).add_modifier(Modifier::BOLD),
@@ -1485,15 +1519,34 @@ impl App {
                         },
                     ),
                 ];
+
+                let count = self.project_usage.get(&project.id).copied().unwrap_or(0);
+                if count > 0 {
+                    let pct = if self.project_usage_total > 0 {
+                        (count as f64 / self.project_usage_total as f64) * 100.0
+                    } else {
+                        0.0
+                    };
+                    spans.push(Span::raw("  "));
+                    spans.push(Span::styled(
+                        format!("· {} entries ({:.0}%)", count, pct),
+                        Style::default().fg(Color::DarkGray),
+                    ));
+                }
+
                 ListItem::new(Line::from(spans))
             })
             .collect();
 
+        let sort_label = match self.project_sort_method {
+            ProjectSortMethod::Name => "name",
+            ProjectSortMethod::Usage => "usage (30d)",
+        };
         let project_list = List::new(project_items)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title("Select Project to Assign"),
+                    .title(format!("Select Project to Assign — sorted by {sort_label}")),
             )
             .highlight_style(
                 Style::default()

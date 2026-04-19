@@ -169,9 +169,9 @@
 - [ ] Add visual indicators for active filters in entry list
 
 ### Project Selector Enhancements
-- [ ] Sort projects by usage in last month (most used first)
-- [ ] Show usage count/percentage per project in selector
-- [ ] Add configuration option to toggle sort method
+- [x] Sort projects by usage in last month (most used first)
+- [x] Show usage count/percentage per project in selector
+- [x] Add configuration option to toggle sort method
 - [x] Jump to project by first-letter key in selector
 
 ## v1.2.2 - Smart Search & Fuzzy Matching (PLANNED)
