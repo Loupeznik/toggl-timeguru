@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Utc};
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -69,11 +69,24 @@ pub struct Report {
 }
 
 fn bucket_key(start: DateTime<Utc>, period: ReportPeriod) -> (String, DateTime<Utc>) {
-    let local = start;
+    let local = start.with_timezone(&Local);
+    let epoch_fallback: DateTime<Utc> = DateTime::<Utc>::from_naive_utc_and_offset(
+        NaiveDate::from_ymd_opt(1970, 1, 1)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap(),
+        Utc,
+    );
+
     match period {
         ReportPeriod::Daily => {
             let date = local.date_naive();
-            (date.format("%Y-%m-%d").to_string(), local)
+            let sort_dt = Local
+                .from_local_datetime(&date.and_hms_opt(0, 0, 0).unwrap())
+                .single()
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or(epoch_fallback);
+            (date.format("%Y-%m-%d").to_string(), sort_dt)
         }
         ReportPeriod::Weekly => {
             let weekday_idx = local.weekday().num_days_from_monday() as i64;
@@ -83,26 +96,22 @@ fn bucket_key(start: DateTime<Utc>, period: ReportPeriod) -> (String, DateTime<U
                 monday_date.format("%Y-%m-%d"),
                 local.iso_week().week()
             );
-            let sort_dt = DateTime::<Utc>::from_naive_utc_and_offset(
-                monday_date.and_hms_opt(0, 0, 0).unwrap_or_else(|| {
-                    NaiveDate::from_ymd_opt(1970, 1, 1)
-                        .unwrap()
-                        .and_hms_opt(0, 0, 0)
-                        .unwrap()
-                }),
-                Utc,
-            );
+            let sort_dt = Local
+                .from_local_datetime(&monday_date.and_hms_opt(0, 0, 0).unwrap())
+                .single()
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or(epoch_fallback);
             (label, sort_dt)
         }
         ReportPeriod::Monthly => {
             let label = local.format("%Y-%m").to_string();
-            let sort_dt = DateTime::<Utc>::from_naive_utc_and_offset(
-                NaiveDate::from_ymd_opt(local.year(), local.month(), 1)
-                    .unwrap_or_else(|| NaiveDate::from_ymd_opt(1970, 1, 1).unwrap())
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap(),
-                Utc,
-            );
+            let first = NaiveDate::from_ymd_opt(local.year(), local.month(), 1)
+                .unwrap_or_else(|| NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
+            let sort_dt = Local
+                .from_local_datetime(&first.and_hms_opt(0, 0, 0).unwrap())
+                .single()
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or(epoch_fallback);
             (label, sort_dt)
         }
     }

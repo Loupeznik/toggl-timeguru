@@ -153,7 +153,7 @@
 - Starter tier: 20x more operations per hour
 - Premium tier: 12x more operations per hour
 
-## v1.2.1 - Reports & Advanced Filtering (PLANNED)
+## v1.2.1 - Reports & Advanced Filtering (COMPLETED)
 ### Report Generation
 - [x] Implement daily summary report
 - [x] Add weekly summary report

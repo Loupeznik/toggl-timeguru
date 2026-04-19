@@ -140,7 +140,7 @@ impl TimeEntryFilter {
 
     #[allow(dead_code)]
     pub fn with_tag(mut self, tag: String) -> Self {
-        self.tags.insert(tag);
+        self.tags.insert(tag.to_lowercase());
         self
     }
 
@@ -180,7 +180,12 @@ impl TimeEntryFilter {
             entries.retain(|e| {
                 e.tags
                     .as_ref()
-                    .map(|ts| ts.iter().any(|t| self.tags.contains(t)))
+                    .map(|ts| {
+                        ts.iter().any(|t| {
+                            let lower = t.to_lowercase();
+                            self.tags.contains(&lower)
+                        })
+                    })
                     .unwrap_or(false)
             });
         }

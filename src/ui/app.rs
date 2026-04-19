@@ -146,11 +146,11 @@ impl App {
                 .iter()
                 .filter_map(|e| e.tags.as_ref())
                 .flatten()
-                .cloned(),
+                .map(|t| t.to_lowercase()),
         )
         .into_iter()
         .collect();
-        available_tags.sort_by_key(|t| t.to_lowercase());
+        available_tags.sort();
 
         let mut active_filter = TimeEntryFilter::new();
         for pid in saved_filter.project_ids {
@@ -159,8 +159,9 @@ impl App {
             }
         }
         for tag in saved_filter.tags {
-            if available_tags.contains(&tag) {
-                active_filter.tags.insert(tag);
+            let lower = tag.to_lowercase();
+            if available_tags.contains(&lower) {
+                active_filter.tags.insert(lower);
             }
         }
         active_filter.billable_only = saved_filter.billable_only;

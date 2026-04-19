@@ -239,7 +239,12 @@ async fn handle_report(
     let db = Database::new(None)?;
 
     let end_date = if let Some(end_str) = end {
-        Cli::parse_date(&end_str)?
+        let parsed = Cli::parse_date(&end_str)?;
+        if is_date_only(&end_str) {
+            parsed + Duration::days(1) - Duration::seconds(1)
+        } else {
+            parsed
+        }
     } else {
         Utc::now()
     };
@@ -256,6 +261,17 @@ async fn handle_report(
         let client = TogglClient::new(api_token)?;
         let fetched = client.get_time_entries(start_date, end_date).await?;
         db.save_time_entries(&fetched)?;
+
+        if db.get_projects().map(|p| p.is_empty()).unwrap_or(true)
+            && let Ok(workspaces) = client.get_workspaces().await
+        {
+            for workspace in workspaces {
+                if let Ok(projects) = client.get_projects(workspace.id).await {
+                    let _ = db.save_projects(&projects);
+                }
+            }
+        }
+
         fetched
     };
 
@@ -268,6 +284,10 @@ async fn handle_report(
     report::print_text(&report);
 
     Ok(())
+}
+
+fn is_date_only(s: &str) -> bool {
+    chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").is_ok()
 }
 
 async fn handle_list(
