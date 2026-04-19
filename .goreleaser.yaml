@@ -27,7 +27,7 @@ archives:
     files:
       - LICENSE
       - README.md
-      - docs/**/*
+      - docs/*
 
 dockers_v2:
   - id: toggl-timeguru
