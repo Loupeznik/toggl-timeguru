@@ -124,6 +124,7 @@ impl App {
         current_user_email: Option<String>,
         db: Arc<crate::db::Database>,
         project_usage: HashMap<i64, usize>,
+        project_usage_window_start: DateTime<Utc>,
         project_sort_method: ProjectSortMethod,
         saved_filter: PersistedFilter,
     ) -> Self {
@@ -217,7 +218,7 @@ impl App {
             db,
             project_usage,
             project_usage_total,
-            project_usage_window_start: Utc::now() - chrono::Duration::days(30),
+            project_usage_window_start,
             project_sort_method,
         }
     }
@@ -1937,7 +1938,7 @@ impl App {
         let mut help_spans = vec![
             Span::styled("Controls: ", Style::default().fg(Color::Yellow)),
             Span::raw(
-                "↑↓/jk: Navigate  │  a-z: Jump  │  /: Search  │  Enter: Select  │  p/Esc: Cancel",
+                "↑↓/jk: Navigate  │  0-9/a-z: Jump  │  /: Search  │  Enter: Select  │  p/Esc: Cancel",
             ),
         ];
 

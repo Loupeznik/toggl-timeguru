@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Utc};
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Utc};
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -100,25 +100,12 @@ pub struct Report {
     pub round_mode: RoundingMode,
 }
 
-fn bucket_key(start: DateTime<Utc>, period: ReportPeriod) -> (String, DateTime<Utc>) {
+fn bucket_key(start: DateTime<Utc>, period: ReportPeriod) -> (String, NaiveDate) {
     let local = start.with_timezone(&Local);
-    let epoch_fallback: DateTime<Utc> = DateTime::<Utc>::from_naive_utc_and_offset(
-        NaiveDate::from_ymd_opt(1970, 1, 1)
-            .unwrap()
-            .and_hms_opt(0, 0, 0)
-            .unwrap(),
-        Utc,
-    );
-
     match period {
         ReportPeriod::Daily => {
             let date = local.date_naive();
-            let sort_dt = Local
-                .from_local_datetime(&date.and_hms_opt(0, 0, 0).unwrap())
-                .single()
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or(epoch_fallback);
-            (date.format("%Y-%m-%d").to_string(), sort_dt)
+            (date.format("%Y-%m-%d").to_string(), date)
         }
         ReportPeriod::Weekly => {
             let weekday_idx = local.weekday().num_days_from_monday() as i64;
@@ -128,23 +115,13 @@ fn bucket_key(start: DateTime<Utc>, period: ReportPeriod) -> (String, DateTime<U
                 monday_date.format("%Y-%m-%d"),
                 local.iso_week().week()
             );
-            let sort_dt = Local
-                .from_local_datetime(&monday_date.and_hms_opt(0, 0, 0).unwrap())
-                .single()
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or(epoch_fallback);
-            (label, sort_dt)
+            (label, monday_date)
         }
         ReportPeriod::Monthly => {
             let label = local.format("%Y-%m").to_string();
             let first = NaiveDate::from_ymd_opt(local.year(), local.month(), 1)
                 .unwrap_or_else(|| NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
-            let sort_dt = Local
-                .from_local_datetime(&first.and_hms_opt(0, 0, 0).unwrap())
-                .single()
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or(epoch_fallback);
-            (label, sort_dt)
+            (label, first)
         }
     }
 }
@@ -229,20 +206,20 @@ pub fn generate(
 
     let by_project = aggregate_by_project(&valid, &projects_map);
 
-    type BucketEntries<'a> = (DateTime<Utc>, Vec<(&'a TimeEntry, i64)>);
+    type BucketEntries<'a> = (NaiveDate, Vec<(&'a TimeEntry, i64)>);
     let mut bucket_groups: HashMap<String, BucketEntries> = HashMap::new();
     for (entry, dur) in &valid {
-        let (label, sort_dt) = bucket_key(entry.start, period);
+        let (label, sort_key) = bucket_key(entry.start, period);
         bucket_groups
             .entry(label)
-            .or_insert_with(|| (sort_dt, Vec::new()))
+            .or_insert_with(|| (sort_key, Vec::new()))
             .1
             .push((entry, *dur));
     }
 
-    let mut buckets_with_sort: Vec<(DateTime<Utc>, PeriodBucket)> = bucket_groups
+    let mut buckets_with_sort: Vec<(NaiveDate, PeriodBucket)> = bucket_groups
         .into_iter()
-        .map(|(label, (sort_dt, bucket_entries))| {
+        .map(|(label, (sort_key, bucket_entries))| {
             let duration: i64 = bucket_entries.iter().map(|(_, d)| *d).sum();
             let bucket_billable: i64 = bucket_entries
                 .iter()
@@ -252,7 +229,7 @@ pub fn generate(
             let bucket_non_billable = duration - bucket_billable;
             let by_project = aggregate_by_project(&bucket_entries, &projects_map);
             (
-                sort_dt,
+                sort_key,
                 PeriodBucket {
                     label,
                     duration,

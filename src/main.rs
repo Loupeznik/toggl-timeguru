@@ -267,20 +267,35 @@ async fn handle_report(
     };
 
     let end_date = if let Some(end_str) = end {
-        let parsed = Cli::parse_date(&end_str)?;
         if is_date_only(&end_str) {
-            parsed + Duration::days(1) - Duration::seconds(1)
+            parse_local_date_end(&end_str)?
         } else {
-            parsed
+            Cli::parse_date(&end_str)?
         }
     } else {
         Utc::now()
     };
     let start_date = if let Some(start_str) = start {
-        Cli::parse_date(&start_str)?
+        if is_date_only(&start_str) {
+            parse_local_date_start(&start_str)?
+        } else {
+            Cli::parse_date(&start_str)?
+        }
     } else {
         end_date - config.default_date_range()
     };
+
+    if start_date > end_date {
+        anyhow::bail!(
+            "--start ({}) must not be after --end ({})",
+            start_date
+                .with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M"),
+            end_date
+                .with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M"),
+        );
+    }
 
     let mut entries = if offline {
         db.get_time_entries(start_date, end_date, config.current_user_id)?
@@ -324,6 +339,40 @@ async fn handle_report(
 
 fn is_date_only(s: &str) -> bool {
     chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").is_ok()
+}
+
+fn parse_local_date_start(s: &str) -> Result<chrono::DateTime<Utc>> {
+    use chrono::{Local, TimeZone};
+    let date = chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d")?;
+    let naive_dt = date
+        .and_hms_opt(0, 0, 0)
+        .ok_or_else(|| anyhow::anyhow!("invalid local midnight"))?;
+    let local_dt = Local
+        .from_local_datetime(&naive_dt)
+        .earliest()
+        .ok_or_else(|| {
+            anyhow::anyhow!("could not resolve local midnight for {s} (likely a DST transition)")
+        })?;
+    Ok(local_dt.with_timezone(&Utc))
+}
+
+fn parse_local_date_end(s: &str) -> Result<chrono::DateTime<Utc>> {
+    use chrono::{Local, TimeZone};
+    let date = chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d")?;
+    let next = date + Duration::days(1);
+    let naive_dt = next
+        .and_hms_opt(0, 0, 0)
+        .ok_or_else(|| anyhow::anyhow!("invalid local midnight"))?;
+    let local_next = Local
+        .from_local_datetime(&naive_dt)
+        .earliest()
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not resolve local midnight for {} (likely a DST transition)",
+                next
+            )
+        })?;
+    Ok(local_next.with_timezone(&Utc) - Duration::seconds(1))
 }
 
 async fn handle_list(
@@ -572,6 +621,7 @@ async fn handle_tui(
         config.current_user_email.clone(),
         db,
         project_usage,
+        usage_window_start,
         config.project_sort_method,
         config.saved_filter.clone(),
     );
