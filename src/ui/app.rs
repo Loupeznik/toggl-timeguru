@@ -107,6 +107,7 @@ pub struct App {
     pub db: Arc<crate::db::Database>,
     pub project_usage: HashMap<i64, usize>,
     pub project_usage_total: usize,
+    pub project_usage_window_start: DateTime<Utc>,
     pub project_sort_method: ProjectSortMethod,
 }
 
@@ -216,6 +217,7 @@ impl App {
             db,
             project_usage,
             project_usage_total,
+            project_usage_window_start: Utc::now() - chrono::Duration::days(30),
             project_sort_method,
         }
     }
@@ -1113,6 +1115,33 @@ impl App {
         }
     }
 
+    fn adjust_usage_for_reassign(
+        &mut self,
+        start: DateTime<Utc>,
+        old_pid: Option<i64>,
+        new_pid: Option<i64>,
+    ) {
+        if old_pid == new_pid {
+            return;
+        }
+        if start < self.project_usage_window_start || start > Utc::now() {
+            return;
+        }
+        if let Some(old) = old_pid
+            && let Some(count) = self.project_usage.get_mut(&old)
+        {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                self.project_usage.remove(&old);
+            }
+            self.project_usage_total = self.project_usage_total.saturating_sub(1);
+        }
+        if let Some(new) = new_pid {
+            *self.project_usage.entry(new).or_insert(0) += 1;
+            self.project_usage_total += 1;
+        }
+    }
+
     fn assign_project_to_entry(&mut self) {
         tracing::info!("assign_project_to_entry called");
 
@@ -1257,6 +1286,12 @@ impl App {
                         );
 
                         for entry_id in &bulk_result.success {
+                            let prior = self
+                                .all_entries
+                                .iter()
+                                .find(|e| e.id == *entry_id)
+                                .map(|e| (e.start, e.project_id));
+
                             if let Some(time_entry) =
                                 self.time_entries.iter_mut().find(|e| e.id == *entry_id)
                             {
@@ -1267,6 +1302,10 @@ impl App {
                                 self.all_entries.iter_mut().find(|e| e.id == *entry_id)
                             {
                                 all_entry.project_id = Some(project_id);
+                            }
+
+                            if let Some((start, old_pid)) = prior {
+                                self.adjust_usage_for_reassign(start, old_pid, Some(project_id));
                             }
 
                             if let Err(e) = self
@@ -1397,6 +1436,12 @@ impl App {
                 Ok(Ok(_updated_entry)) => {
                     tracing::info!("Successfully assigned project to entry {}", entry_id);
 
+                    let prior = self
+                        .all_entries
+                        .iter()
+                        .find(|e| e.id == entry_id)
+                        .map(|e| (e.start, e.project_id));
+
                     if let Some(entry_mut) = self.time_entries.get_mut(selected_entry_idx) {
                         entry_mut.project_id = Some(project_id);
                     }
@@ -1404,6 +1449,10 @@ impl App {
                     if let Some(all_entry) = self.all_entries.iter_mut().find(|e| e.id == entry_id)
                     {
                         all_entry.project_id = Some(project_id);
+                    }
+
+                    if let Some((start, old_pid)) = prior {
+                        self.adjust_usage_for_reassign(start, old_pid, Some(project_id));
                     }
 
                     if let Err(e) = self
