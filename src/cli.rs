@@ -102,6 +102,19 @@ pub enum Commands {
 
         #[arg(long, help = "Use cached data (offline mode)")]
         offline: bool,
+
+        #[arg(
+            long,
+            help = "Round durations up (uses config default period unless --round-minutes is set)"
+        )]
+        round: bool,
+
+        #[arg(
+            long,
+            value_name = "MINUTES",
+            help = "Round durations up to this many minutes (implies --round)"
+        )]
+        round_minutes: Option<i64>,
     },
 
     #[command(about = "Delete application data (database and/or config)")]

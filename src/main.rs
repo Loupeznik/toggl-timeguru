@@ -95,7 +95,21 @@ async fn main() -> Result<()> {
                 start,
                 end,
                 offline,
-            } => handle_report(period, project, start, end, offline, cli.api_token).await?,
+                round,
+                round_minutes,
+            } => {
+                handle_report(
+                    period,
+                    project,
+                    start,
+                    end,
+                    offline,
+                    round,
+                    round_minutes,
+                    cli.api_token,
+                )
+                .await?
+            }
 
             Commands::Clean {
                 all,
@@ -224,12 +238,15 @@ async fn handle_config(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_report(
     period: String,
     project: Option<i64>,
     start: Option<String>,
     end: Option<String>,
     offline: bool,
+    round: bool,
+    round_minutes_flag: Option<i64>,
     cli_api_token: Option<String>,
 ) -> Result<()> {
     use std::str::FromStr;
@@ -237,6 +254,13 @@ async fn handle_report(
     let report_period = report::ReportPeriod::from_str(&period)?;
     let config = Config::load()?;
     let db = Database::new(None)?;
+
+    let round_minutes = match round_minutes_flag {
+        Some(n) if n > 0 => Some(n),
+        Some(n) => anyhow::bail!("--round-minutes must be a positive integer, got {n}"),
+        None if round => Some(config.round_duration_minutes.unwrap_or(15)),
+        None => None,
+    };
 
     let end_date = if let Some(end_str) = end {
         let parsed = Cli::parse_date(&end_str)?;
@@ -280,7 +304,14 @@ async fn handle_report(
     }
 
     let projects = db.get_projects().unwrap_or_default();
-    let report = report::generate(&entries, &projects, report_period, start_date, end_date);
+    let report = report::generate(
+        &entries,
+        &projects,
+        report_period,
+        start_date,
+        end_date,
+        round_minutes,
+    );
     report::print_text(&report);
 
     Ok(())

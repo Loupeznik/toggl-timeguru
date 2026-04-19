@@ -66,6 +66,7 @@ pub struct Report {
     pub non_billable_duration: i64,
     pub by_project: Vec<ProjectSummary>,
     pub by_period: Vec<PeriodBucket>,
+    pub round_minutes: Option<i64>,
 }
 
 fn bucket_key(start: DateTime<Utc>, period: ReportPeriod) -> (String, DateTime<Utc>) {
@@ -169,6 +170,7 @@ pub fn generate(
     period: ReportPeriod,
     start_date: DateTime<Utc>,
     end_date: DateTime<Utc>,
+    round_minutes: Option<i64>,
 ) -> Report {
     let projects_map: HashMap<i64, Project> = projects.iter().map(|p| (p.id, p.clone())).collect();
 
@@ -233,11 +235,25 @@ pub fn generate(
         non_billable_duration,
         by_project,
         by_period,
+        round_minutes,
     }
 }
 
-fn format_hours(seconds: i64) -> String {
-    format!("{:.2}h", seconds as f64 / 3600.0)
+fn round_seconds_up(seconds: i64, round_minutes: Option<i64>) -> i64 {
+    match round_minutes {
+        Some(m) if m > 0 => {
+            let step = m * 60;
+            ((seconds as f64 / step as f64).ceil() as i64) * step
+        }
+        _ => seconds,
+    }
+}
+
+fn format_hours(seconds: i64, round_minutes: Option<i64>) -> String {
+    format!(
+        "{:.2}h",
+        round_seconds_up(seconds, round_minutes) as f64 / 3600.0
+    )
 }
 
 fn pct(part: i64, total: i64) -> f64 {
@@ -251,11 +267,17 @@ fn pct(part: i64, total: i64) -> f64 {
 pub fn print_text(report: &Report) {
     let start_local = report.start_date.with_timezone(&Local);
     let end_local = report.end_date.with_timezone(&Local);
+    let round = report.round_minutes;
+    let round_suffix = round
+        .map(|m| format!(" (rounded up to {m} min)"))
+        .unwrap_or_default();
+
     println!(
-        "\n{} Report — {} to {}",
+        "\n{} Report — {} to {}{}",
         report.period.label(),
         start_local.format("%Y-%m-%d"),
         end_local.format("%Y-%m-%d"),
+        round_suffix,
     );
     println!("{}", "─".repeat(70));
 
@@ -266,10 +288,10 @@ pub fn print_text(report: &Report) {
 
     println!(
         "Total: {}  │  Billable: {} ({:.0}%)  │  Non-billable: {} ({:.0}%)  │  Entries: {}",
-        format_hours(report.total_duration),
-        format_hours(report.billable_duration),
+        format_hours(report.total_duration, round),
+        format_hours(report.billable_duration, round),
         pct(report.billable_duration, report.total_duration),
-        format_hours(report.non_billable_duration),
+        format_hours(report.non_billable_duration, round),
         pct(report.non_billable_duration, report.total_duration),
         report.entry_count,
     );
@@ -284,10 +306,10 @@ pub fn print_text(report: &Report) {
         println!(
             "  {:<40} {:>10} {:>7.0}% {:>10} {:>10}",
             truncate(&p.project_name, 40),
-            format_hours(p.duration),
+            format_hours(p.duration, round),
             pct(p.duration, report.total_duration),
-            format_hours(p.billable_duration),
-            format_hours(p.non_billable_duration),
+            format_hours(p.billable_duration, round),
+            format_hours(p.non_billable_duration, round),
         );
     }
 
@@ -301,15 +323,15 @@ pub fn print_text(report: &Report) {
         println!(
             "  {:<22} {:>10} {:>10} {:>10}",
             bucket.label,
-            format_hours(bucket.duration),
-            format_hours(bucket.billable_duration),
-            format_hours(bucket.non_billable_duration),
+            format_hours(bucket.duration, round),
+            format_hours(bucket.billable_duration, round),
+            format_hours(bucket.non_billable_duration, round),
         );
         for p in bucket.by_project.iter().take(5) {
             println!(
                 "      {:<36} {:>10} {:>7.0}%",
                 truncate(&p.project_name, 36),
-                format_hours(p.duration),
+                format_hours(p.duration, round),
                 pct(p.duration, bucket.duration),
             );
         }
@@ -398,7 +420,7 @@ mod tests {
             entry(3, d2, 7200, Some(2), true),
         ];
         let projects = vec![project(1, "A"), project(2, "B")];
-        let report = generate(&entries, &projects, ReportPeriod::Daily, d1, d2);
+        let report = generate(&entries, &projects, ReportPeriod::Daily, d1, d2, None);
 
         assert_eq!(report.total_duration, 3600 + 1800 + 7200);
         assert_eq!(report.billable_duration, 3600 + 7200);
@@ -417,7 +439,7 @@ mod tests {
             entry(2, fri, 1800, Some(1), true),
         ];
         let projects = vec![project(1, "A")];
-        let report = generate(&entries, &projects, ReportPeriod::Weekly, wed, fri);
+        let report = generate(&entries, &projects, ReportPeriod::Weekly, wed, fri, None);
         assert_eq!(report.by_period.len(), 1);
         assert_eq!(report.by_period[0].duration, 5400);
     }
@@ -430,9 +452,20 @@ mod tests {
             entry(2, d, 3600, Some(1), true),
         ];
         let projects = vec![project(1, "A")];
-        let report = generate(&entries, &projects, ReportPeriod::Daily, d, d);
+        let report = generate(&entries, &projects, ReportPeriod::Daily, d, d, None);
         assert_eq!(report.entry_count, 1);
         assert_eq!(report.total_duration, 3600);
+    }
+
+    #[test]
+    fn rounding_ceils_to_next_interval() {
+        assert_eq!(round_seconds_up(0, Some(15)), 0);
+        assert_eq!(round_seconds_up(1, Some(15)), 900);
+        assert_eq!(round_seconds_up(900, Some(15)), 900);
+        assert_eq!(round_seconds_up(901, Some(15)), 1800);
+        assert_eq!(round_seconds_up(3601, Some(30)), 5400);
+        assert_eq!(round_seconds_up(3601, None), 3601);
+        assert_eq!(round_seconds_up(3601, Some(0)), 3601);
     }
 
     #[test]
