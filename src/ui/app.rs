@@ -64,6 +64,7 @@ pub struct App {
     pub error_message: Option<String>,
     pub show_edit_modal: bool,
     pub edit_input: String,
+    pub edit_cursor: usize,
     pub edit_entry_ids: Vec<i64>,
     pub client: Option<Arc<TogglClient>>,
     pub runtime_handle: Option<tokio::runtime::Handle>,
@@ -132,6 +133,7 @@ impl App {
             error_message: None,
             show_edit_modal: false,
             edit_input: String::new(),
+            edit_cursor: 0,
             edit_entry_ids: Vec::new(),
             client,
             runtime_handle,
@@ -180,13 +182,32 @@ impl App {
                 KeyCode::Esc => {
                     self.show_edit_modal = false;
                     self.edit_input.clear();
+                    self.edit_cursor = 0;
                     self.edit_entry_ids.clear();
                 }
                 KeyCode::Char(c) => {
-                    self.edit_input.push(c);
+                    self.edit_insert_char(c);
                 }
                 KeyCode::Backspace => {
-                    self.edit_input.pop();
+                    self.edit_backspace();
+                }
+                KeyCode::Delete => {
+                    self.edit_delete();
+                }
+                KeyCode::Left => {
+                    self.edit_cursor = self.edit_cursor.saturating_sub(1);
+                }
+                KeyCode::Right => {
+                    let char_count = self.edit_input.chars().count();
+                    if self.edit_cursor < char_count {
+                        self.edit_cursor += 1;
+                    }
+                }
+                KeyCode::Home => {
+                    self.edit_cursor = 0;
+                }
+                KeyCode::End => {
+                    self.edit_cursor = self.edit_input.chars().count();
                 }
                 _ => {}
             }
@@ -412,6 +433,7 @@ impl App {
                 && let Some(grouped_entry) = self.grouped_entries.get(selected_idx)
             {
                 self.edit_input = grouped_entry.description.clone().unwrap_or_default();
+                self.edit_cursor = self.edit_input.chars().count();
                 self.edit_entry_ids = grouped_entry.entries.iter().map(|e| e.id).collect();
                 self.show_edit_modal = true;
             }
@@ -419,6 +441,7 @@ impl App {
             && let Some(entry) = self.time_entries.get(selected_idx)
         {
             self.edit_input = entry.description.clone().unwrap_or_default();
+            self.edit_cursor = self.edit_input.chars().count();
             self.edit_entry_ids = vec![entry.id];
             self.show_edit_modal = true;
         }
@@ -486,6 +509,7 @@ impl App {
 
         self.show_edit_modal = false;
         self.edit_input.clear();
+        self.edit_cursor = 0;
         self.edit_entry_ids.clear();
 
         tracing::info!(
@@ -1743,6 +1767,40 @@ impl App {
         }
     }
 
+    fn edit_char_byte_index(&self, char_index: usize) -> usize {
+        self.edit_input
+            .char_indices()
+            .nth(char_index)
+            .map(|(byte, _)| byte)
+            .unwrap_or(self.edit_input.len())
+    }
+
+    fn edit_insert_char(&mut self, c: char) {
+        let byte_pos = self.edit_char_byte_index(self.edit_cursor);
+        self.edit_input.insert(byte_pos, c);
+        self.edit_cursor += 1;
+    }
+
+    fn edit_backspace(&mut self) {
+        if self.edit_cursor == 0 {
+            return;
+        }
+        let start = self.edit_char_byte_index(self.edit_cursor - 1);
+        let end = self.edit_char_byte_index(self.edit_cursor);
+        self.edit_input.replace_range(start..end, "");
+        self.edit_cursor -= 1;
+    }
+
+    fn edit_delete(&mut self) {
+        let char_count = self.edit_input.chars().count();
+        if self.edit_cursor >= char_count {
+            return;
+        }
+        let start = self.edit_char_byte_index(self.edit_cursor);
+        let end = self.edit_char_byte_index(self.edit_cursor + 1);
+        self.edit_input.replace_range(start..end, "");
+    }
+
     fn render_edit_modal(&self, f: &mut Frame) {
         if !self.show_edit_modal {
             return;
@@ -1772,17 +1830,42 @@ impl App {
 
         let inner_area = block.inner(popup_area);
 
+        let text_style = Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD);
+        let cursor_on_char_style = Style::default()
+            .fg(Color::Black)
+            .bg(Color::White)
+            .add_modifier(Modifier::BOLD);
+        let cursor_at_end_style = Style::default()
+            .fg(Color::Black)
+            .bg(Color::White)
+            .add_modifier(Modifier::SLOW_BLINK);
+
+        let chars: Vec<char> = self.edit_input.chars().collect();
+        let cursor_pos = self.edit_cursor.min(chars.len());
+        let before: String = chars[..cursor_pos].iter().collect();
+        let input_line: Line = if cursor_pos < chars.len() {
+            let cursor_char = chars[cursor_pos].to_string();
+            let after: String = chars[cursor_pos + 1..].iter().collect();
+            Line::from(vec![
+                Span::styled(before, text_style),
+                Span::styled(cursor_char, cursor_on_char_style),
+                Span::styled(after, text_style),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled(before, text_style),
+                Span::styled(" ", cursor_at_end_style),
+            ])
+        };
+
         let text = vec![
             Line::from(""),
-            Line::from(vec![Span::styled(
-                &self.edit_input,
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )]),
+            input_line,
             Line::from(""),
             Line::from(vec![Span::styled(
-                "Enter: Save  │  Esc: Cancel",
+                "Enter: Save  │  ←/→: Move  │  Del/Backspace: Erase  │  Esc: Cancel",
                 Style::default()
                     .fg(Color::Gray)
                     .add_modifier(Modifier::ITALIC),
@@ -1797,12 +1880,5 @@ impl App {
             .style(Style::default().bg(Color::Black));
 
         f.render_widget(paragraph, inner_area);
-
-        let input_len = self.edit_input.chars().count() as u16;
-        let cursor_x = inner_area
-            .x
-            .saturating_add(input_len.min(inner_area.width.saturating_sub(1)));
-        let cursor_y = inner_area.y.saturating_add(1);
-        f.set_cursor_position((cursor_x, cursor_y));
     }
 }
