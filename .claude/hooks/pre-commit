@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Pre-commit hook that mirrors the CI static checks for toggl-timeguru.
+# Runs cargo fmt --check, cargo clippy (deny warnings), cargo test and cargo build.
+#
+# Enable with:
+#   git config core.hooksPath .claude/hooks
+#
+# Bypass (not recommended) with:
+#   git commit --no-verify
+
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+RESET=$'\033[0m'
+
+run_step() {
+    local name="$1"; shift
+    printf '%b==> %s%b\n' "$YELLOW" "$name" "$RESET"
+    if ! "$@"; then
+        printf '%bpre-commit failed: %s%b\n' "$RED" "$name" "$RESET" >&2
+        exit 1
+    fi
+}
+
+run_step "cargo fmt --all -- --check"        cargo fmt --all -- --check
+run_step "cargo clippy -- -D warnings"       cargo clippy --all-targets --all-features -- -D warnings
+run_step "cargo test"                        cargo test --all-features --quiet
+run_step "cargo build"                       cargo build
+
+printf '%bpre-commit checks passed%b\n' "$GREEN" "$RESET"
