@@ -844,11 +844,24 @@ impl App {
 
     fn jump_to_project_by_char(&mut self, c: char) {
         let target = c.to_ascii_lowercase();
-        if let Some(idx) = self
-            .filtered_projects
-            .iter()
-            .position(|p| p.name.chars().next().map(|c| c.to_ascii_lowercase()) == Some(target))
-        {
+        let matches_target =
+            |p: &Project| p.name.chars().next().map(|c| c.to_ascii_lowercase()) == Some(target);
+
+        let start = self
+            .project_selector_state
+            .selected()
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let len = self.filtered_projects.len();
+        if len == 0 {
+            return;
+        }
+
+        let next = (0..len)
+            .map(|offset| (start + offset) % len)
+            .find(|&i| matches_target(&self.filtered_projects[i]));
+
+        if let Some(idx) = next {
             self.project_selector_state.select(Some(idx));
         }
     }
@@ -1530,7 +1543,7 @@ impl App {
                     spans.push(Span::raw("  "));
                     spans.push(Span::styled(
                         format!("· {} entries ({:.0}%)", count, pct),
-                        Style::default().fg(Color::DarkGray),
+                        Style::default().fg(Color::Gray),
                     ));
                 }
 
@@ -1784,5 +1797,12 @@ impl App {
             .style(Style::default().bg(Color::Black));
 
         f.render_widget(paragraph, inner_area);
+
+        let input_len = self.edit_input.chars().count() as u16;
+        let cursor_x = inner_area
+            .x
+            .saturating_add(input_len.min(inner_area.width.saturating_sub(1)));
+        let cursor_y = inner_area.y.saturating_add(1);
+        f.set_cursor_position((cursor_x, cursor_y));
     }
 }
