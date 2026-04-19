@@ -153,25 +153,27 @@
 - Starter tier: 20x more operations per hour
 - Premium tier: 12x more operations per hour
 
-## v1.2.1 - Reports & Advanced Filtering (PLANNED)
+## v1.2.1 - Reports & Advanced Filtering (COMPLETED)
 ### Report Generation
-- [ ] Implement daily summary report
-- [ ] Add weekly summary report
-- [ ] Create monthly summary report
-- [ ] Add project-specific reports
-- [ ] Calculate billable vs non-billable hours
+- [x] Implement daily summary report
+- [x] Add weekly summary report
+- [x] Create monthly summary report
+- [x] Add project-specific reports (via `--project <id>`)
+- [x] Calculate billable vs non-billable hours
 
 ### Interactive TUI Filtering
-- [ ] Add project filtering UI to TUI filter panel
-- [ ] Add tag filtering UI to TUI filter panel
-- [ ] Add client filtering UI to TUI filter panel
-- [ ] Add filter persistence across TUI sessions
-- [ ] Add visual indicators for active filters in entry list
+- [x] Add project filtering UI to TUI filter panel (multi-select)
+- [x] Add tag filtering UI to TUI filter panel (multi-select)
+- [ ] Add client filtering UI to TUI filter panel (deferred — no Client model yet)
+- [x] Add filter persistence across TUI sessions
+- [x] Add visual indicators for active filters in entry list
 
 ### Project Selector Enhancements
-- [ ] Sort projects by usage in last month (most used first)
-- [ ] Show usage count/percentage per project in selector
-- [ ] Add configuration option to toggle sort method
+- [x] Sort projects by usage in last month (most used first)
+- [x] Show usage count/percentage per project in selector
+- [x] Add configuration option to toggle sort method
+- [x] Jump to project by first-letter key in selector
+- [x] `c` hotkey in main entry list clears all active filters
 
 ## v1.2.2 - Smart Search & Fuzzy Matching (PLANNED)
 ### Instant Project Search

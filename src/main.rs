@@ -2,6 +2,7 @@ mod cli;
 mod config;
 mod db;
 mod processor;
+mod report;
 mod toggl;
 mod ui;
 
@@ -17,7 +18,7 @@ use std::io;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use cli::{Cli, Commands, TrackAction};
-use config::Config;
+use config::{Config, ProjectSortMethod};
 use db::Database;
 use processor::{
     filter_by_project, filter_by_tag, group_by_description, group_by_description_and_day,
@@ -62,8 +63,18 @@ async fn main() -> Result<()> {
                 set_token,
                 set_date_range,
                 set_round_minutes,
+                set_project_sort,
                 show,
-            } => handle_config(set_token, set_date_range, set_round_minutes, show).await?,
+            } => {
+                handle_config(
+                    set_token,
+                    set_date_range,
+                    set_round_minutes,
+                    set_project_sort,
+                    show,
+                )
+                .await?
+            }
 
             Commands::List {
                 start,
@@ -77,6 +88,30 @@ async fn main() -> Result<()> {
             Commands::Sync { start, end } => handle_sync(start, end, cli.api_token).await?,
 
             Commands::Tui { start, end } => handle_tui(start, end, cli.api_token).await?,
+
+            Commands::Report {
+                period,
+                project,
+                start,
+                end,
+                offline,
+                round,
+                round_minutes,
+                round_mode,
+            } => {
+                handle_report(
+                    period,
+                    project,
+                    start,
+                    end,
+                    offline,
+                    round,
+                    round_minutes,
+                    round_mode,
+                    cli.api_token,
+                )
+                .await?
+            }
 
             Commands::Clean {
                 all,
@@ -153,8 +188,10 @@ async fn handle_config(
     set_token: Option<String>,
     set_date_range: Option<i64>,
     set_round_minutes: Option<i64>,
+    set_project_sort: Option<String>,
     show: bool,
 ) -> Result<()> {
+    use std::str::FromStr;
     let mut config = Config::load()?;
 
     if let Some(token) = set_token {
@@ -175,6 +212,13 @@ async fn handle_config(
         println!("Rounding duration set to {} minutes", minutes);
     }
 
+    if let Some(method_str) = set_project_sort {
+        let method = ProjectSortMethod::from_str(&method_str)?;
+        config.project_sort_method = method;
+        config.save()?;
+        println!("Project sort method set to {:?}", method);
+    }
+
     if show {
         println!("\nCurrent Configuration:");
         println!(
@@ -186,6 +230,7 @@ async fn handle_config(
             "  Round duration: {:?} minutes",
             config.round_duration_minutes
         );
+        println!("  Project sort method: {:?}", config.project_sort_method);
         println!(
             "  API token configured: {}",
             config.api_token_encrypted.is_some()
@@ -193,6 +238,141 @@ async fn handle_config(
     }
 
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_report(
+    period: String,
+    project: Option<i64>,
+    start: Option<String>,
+    end: Option<String>,
+    offline: bool,
+    round: bool,
+    round_minutes_flag: Option<i64>,
+    round_mode: String,
+    cli_api_token: Option<String>,
+) -> Result<()> {
+    use std::str::FromStr;
+
+    let report_period = report::ReportPeriod::from_str(&period)?;
+    let rounding_mode = report::RoundingMode::from_str(&round_mode)?;
+    let config = Config::load()?;
+    let db = Database::new(None)?;
+
+    let round_minutes = match round_minutes_flag {
+        Some(n) if n > 0 => Some(n),
+        Some(n) => anyhow::bail!("--round-minutes must be a positive integer, got {n}"),
+        None if round => Some(config.round_duration_minutes.unwrap_or(15)),
+        None => None,
+    };
+
+    let end_date = if let Some(end_str) = end {
+        if is_date_only(&end_str) {
+            parse_local_date_end(&end_str)?
+        } else {
+            Cli::parse_date(&end_str)?
+        }
+    } else {
+        Utc::now()
+    };
+    let start_date = if let Some(start_str) = start {
+        if is_date_only(&start_str) {
+            parse_local_date_start(&start_str)?
+        } else {
+            Cli::parse_date(&start_str)?
+        }
+    } else {
+        end_date - config.default_date_range()
+    };
+
+    if start_date > end_date {
+        anyhow::bail!(
+            "--start ({}) must not be after --end ({})",
+            start_date
+                .with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M"),
+            end_date
+                .with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M"),
+        );
+    }
+
+    let mut entries = if offline {
+        db.get_time_entries(start_date, end_date, config.current_user_id)?
+    } else {
+        let api_token = get_api_token(cli_api_token, &config)?;
+        let client = TogglClient::new(api_token)?;
+        let fetched = client.get_time_entries(start_date, end_date).await?;
+        db.save_time_entries(&fetched)?;
+
+        if db.get_projects().map(|p| p.is_empty()).unwrap_or(true)
+            && let Ok(workspaces) = client.get_workspaces().await
+        {
+            for workspace in workspaces {
+                if let Ok(projects) = client.get_projects(workspace.id).await {
+                    let _ = db.save_projects(&projects);
+                }
+            }
+        }
+
+        fetched
+    };
+
+    if let Some(project_id) = project {
+        entries = filter_by_project(entries, project_id);
+    }
+
+    let projects = db.get_projects().unwrap_or_default();
+    let report = report::generate(
+        &entries,
+        &projects,
+        report_period,
+        start_date,
+        end_date,
+        round_minutes,
+        rounding_mode,
+    );
+    report::print_text(&report);
+
+    Ok(())
+}
+
+fn is_date_only(s: &str) -> bool {
+    chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").is_ok()
+}
+
+fn parse_local_date_start(s: &str) -> Result<chrono::DateTime<Utc>> {
+    use chrono::{Local, TimeZone};
+    let date = chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d")?;
+    let naive_dt = date
+        .and_hms_opt(0, 0, 0)
+        .ok_or_else(|| anyhow::anyhow!("invalid local midnight"))?;
+    let local_dt = Local
+        .from_local_datetime(&naive_dt)
+        .earliest()
+        .ok_or_else(|| {
+            anyhow::anyhow!("could not resolve local midnight for {s} (likely a DST transition)")
+        })?;
+    Ok(local_dt.with_timezone(&Utc))
+}
+
+fn parse_local_date_end(s: &str) -> Result<chrono::DateTime<Utc>> {
+    use chrono::{Local, TimeZone};
+    let date = chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d")?;
+    let next = date + Duration::days(1);
+    let naive_dt = next
+        .and_hms_opt(0, 0, 0)
+        .ok_or_else(|| anyhow::anyhow!("invalid local midnight"))?;
+    let local_next = Local
+        .from_local_datetime(&naive_dt)
+        .earliest()
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not resolve local midnight for {} (likely a DST transition)",
+                next
+            )
+        })?;
+    Ok(local_next.with_timezone(&Utc) - Duration::seconds(1))
 }
 
 async fn handle_list(
@@ -403,6 +583,17 @@ async fn handle_tui(
 
     let projects = db.get_projects().unwrap_or_default();
 
+    let usage_window_start = Utc::now() - Duration::days(30);
+    let usage_entries = db
+        .get_time_entries(usage_window_start, Utc::now(), config.current_user_id)
+        .unwrap_or_default();
+    let mut project_usage: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+    for entry in &usage_entries {
+        if let Some(pid) = entry.project_id {
+            *project_usage.entry(pid).or_insert(0) += 1;
+        }
+    }
+
     let client = match get_api_token(cli_api_token, &config) {
         Ok(token) => match TogglClient::new(token) {
             Ok(c) => Some(std::sync::Arc::new(c)),
@@ -429,6 +620,10 @@ async fn handle_tui(
         runtime_handle,
         config.current_user_email.clone(),
         db,
+        project_usage,
+        usage_window_start,
+        config.project_sort_method,
+        config.saved_filter.clone(),
     );
     let grouped = group_by_description(app.time_entries.clone());
     app.grouped_entries = grouped;
@@ -438,6 +633,12 @@ async fn handle_tui(
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
+
+    let mut updated_config = Config::load().unwrap_or(config);
+    updated_config.saved_filter = app.persisted_filter();
+    if let Err(e) = updated_config.save() {
+        tracing::warn!("Failed to persist filter state: {}", e);
+    }
 
     if let Err(err) = res {
         println!("Error: {:?}", err);

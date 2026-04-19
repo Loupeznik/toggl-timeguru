@@ -9,12 +9,47 @@ pub struct Config {
     pub round_duration_minutes: Option<i64>,
     pub current_user_id: Option<i64>,
     pub current_user_email: Option<String>,
+    #[serde(default)]
+    pub project_sort_method: ProjectSortMethod,
+    #[serde(default)]
+    pub saved_filter: PersistedFilter,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct PersistedFilter {
+    #[serde(default)]
+    pub project_ids: Vec<i64>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub billable_only: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ReportFormat {
     Csv,
     Json,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ProjectSortMethod {
+    #[default]
+    Name,
+    Usage,
+}
+
+impl std::str::FromStr for ProjectSortMethod {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "name" => Ok(Self::Name),
+            "usage" => Ok(Self::Usage),
+            other => Err(anyhow::anyhow!(
+                "invalid project sort method '{other}', expected 'name' or 'usage'"
+            )),
+        }
+    }
 }
 
 impl Default for Config {
@@ -26,6 +61,8 @@ impl Default for Config {
             round_duration_minutes: Some(15),
             current_user_id: None,
             current_user_email: None,
+            project_sort_method: ProjectSortMethod::Name,
+            saved_filter: PersistedFilter::default(),
         }
     }
 }

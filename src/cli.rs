@@ -31,6 +31,13 @@ pub enum Commands {
         #[arg(long, help = "Set rounding duration in minutes")]
         set_round_minutes: Option<i64>,
 
+        #[arg(
+            long,
+            help = "Set project selector sort method (name or usage)",
+            value_name = "METHOD"
+        )]
+        set_project_sort: Option<String>,
+
         #[arg(long, help = "Show current configuration")]
         show: bool,
     },
@@ -72,6 +79,50 @@ pub enum Commands {
 
         #[arg(short, long, help = "End date")]
         end: Option<String>,
+    },
+
+    #[command(about = "Generate a summary report for a date range")]
+    Report {
+        #[arg(
+            short,
+            long,
+            default_value = "daily",
+            help = "Bucket period: daily | weekly | monthly"
+        )]
+        period: String,
+
+        #[arg(short = 'P', long, help = "Filter by project id")]
+        project: Option<i64>,
+
+        #[arg(short, long, help = "Start date (ISO 8601 or YYYY-MM-DD)")]
+        start: Option<String>,
+
+        #[arg(short, long, help = "End date (ISO 8601 or YYYY-MM-DD)")]
+        end: Option<String>,
+
+        #[arg(long, help = "Use cached data (offline mode)")]
+        offline: bool,
+
+        #[arg(
+            long,
+            help = "Round durations up (uses config default period unless --round-minutes is set)"
+        )]
+        round: bool,
+
+        #[arg(
+            long,
+            value_name = "MINUTES",
+            help = "Round durations up to this many minutes (implies --round)"
+        )]
+        round_minutes: Option<i64>,
+
+        #[arg(
+            long,
+            default_value = "total",
+            value_name = "MODE",
+            help = "Rounding mode: total (round aggregated totals) | entry (round each entry then sum)"
+        )]
+        round_mode: String,
     },
 
     #[command(about = "Delete application data (database and/or config)")]

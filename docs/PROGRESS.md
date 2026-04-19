@@ -231,51 +231,53 @@ This document tracks the development progress across all phases of the Toggl Tim
 - Starter tier: 20x more operations per hour ✅ ACHIEVED
 - Premium tier: 12x more operations per hour ✅ ACHIEVED
 
-### v1.2.1 Report Generation (PLANNED)
-- [ ] Implement daily summary report
-  - [ ] Show total hours worked per day
-  - [ ] Group by project with subtotals
-  - [ ] Include billable vs non-billable breakdown
-- [ ] Add weekly summary report
-  - [ ] Weekly totals by project
-  - [ ] Daily breakdown within week
-- [ ] Create monthly summary report
-  - [ ] Monthly totals by project
-  - [ ] Weekly breakdown within month
-- [ ] Add project-specific reports
-  - [ ] Filter by single project
-  - [ ] Show detailed breakdown
-- [ ] Calculate billable vs non-billable hours
-  - [ ] Add to all report types
-  - [ ] Show percentages
+### v1.2.1 Report Generation (COMPLETED)
+- [x] Implement daily summary report
+  - [x] Show total hours worked per day
+  - [x] Group by project with subtotals
+  - [x] Include billable vs non-billable breakdown
+- [x] Add weekly summary report
+  - [x] Weekly totals by project (ISO week label, Monday-start)
+  - [x] Daily breakdown within week (top-5 projects per bucket)
+- [x] Add monthly summary report
+  - [x] Monthly totals by project
+- [x] Add project-specific reports
+  - [x] Filter by single project via `--project <id>`
+- [x] Calculate billable vs non-billable hours
+  - [x] Added to all report types
+  - [x] Shows percentages of total
 
-### v1.2.1 Interactive TUI Filtering (PLANNED)
-- [ ] Add project filtering UI to TUI filter panel
-  - [ ] Multi-select project filter
-  - [ ] Visual indication of active filters
-- [ ] Add tag filtering UI to TUI filter panel
-  - [ ] Multi-select tag filter
-  - [ ] Show tag counts
-- [ ] Add client filtering UI to TUI filter panel
-  - [ ] Single-select client filter
-- [ ] Add filter persistence across TUI sessions
-  - [ ] Save active filters to config
-  - [ ] Restore on next launch
-- [ ] Add visual indicators for active filters in entry list
-  - [ ] Badge showing filter count
-  - [ ] Highlight filtered entries
+### v1.2.1 Interactive TUI Filtering (IN PROGRESS)
+- [x] Add project filtering UI to TUI filter panel
+  - [x] Multi-select project filter (Projects section, Enter/Space to toggle)
+  - [x] Visual indication of active filters (● mark on section header, list checkboxes)
+- [x] Add tag filtering UI to TUI filter panel
+  - [x] Multi-select tag filter (Tags section, tags pulled from loaded entries)
+  - [ ] Show tag counts (deferred to a later polish pass)
+- [ ] Add client filtering UI to TUI filter panel (deferred — no Client model/names yet)
+- [x] Add filter persistence across TUI sessions
+  - [x] Save active filters to config on TUI exit
+  - [x] Restore on next launch (stale ids/tags pruned)
+- [x] Add visual indicators for active filters in entry list
+  - [x] Status line shows `[FILTERED: ...]` with per-filter breakdown
+  - [x] Filter panel title shows active filter count
 
-### v1.2.1 Project Selector Enhancements (PLANNED)
-- [ ] Sort projects by usage in last month
-  - [ ] Count time entries per project in last 30 days
-  - [ ] Sort by entry count (most used first)
-  - [ ] Show usage count in selector
-- [ ] Show usage statistics per project
-  - [ ] Display percentage of total time
-  - [ ] Show entry count
-- [ ] Add configuration option to toggle sort method
-  - [ ] Sort by name (default/existing)
-  - [ ] Sort by usage (new option)
+### v1.2.1 Project Selector Enhancements (IN PROGRESS)
+- [x] Sort projects by usage in last month
+  - [x] Count time entries per project in last 30 days
+  - [x] Sort by entry count (most used first)
+  - [x] Show usage count in selector
+- [x] Show usage statistics per project
+  - [x] Display percentage of total time
+  - [x] Show entry count
+- [x] Add configuration option to toggle sort method
+  - [x] Sort by name (default/existing)
+  - [x] Sort by usage (new option, via `config --set-project-sort usage`)
+- [x] Jump to project by first-letter key in selector
+  - [x] Press any alphanumeric key to jump to first project starting with that letter
+  - [x] Works when search query is empty; does not interfere with navigation keys
+  - [x] Repeated presses cycle through matches, wrapping at the end
+- [x] `c` hotkey in main entry list clears all active filters without opening the panel
 
 ### v1.2.2 Instant Project Search (PLANNED)
 - [ ] Type-to-filter in project selector (no '/' needed)
