@@ -276,6 +276,9 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [ ] Add configuration option to toggle sort method
   - [ ] Sort by name (default/existing)
   - [ ] Sort by usage (new option)
+- [x] Jump to project by first-letter key in selector
+  - [x] Press any alphanumeric key to jump to first project starting with that letter
+  - [x] Works when search query is empty; does not interfere with navigation keys
 
 ### v1.2.2 Instant Project Search (PLANNED)
 - [ ] Type-to-filter in project selector (no '/' needed)

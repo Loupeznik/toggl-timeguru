@@ -206,6 +206,9 @@ impl App {
                     self.project_search_query.pop();
                     self.filter_projects();
                 }
+                KeyCode::Char(c) if c.is_alphanumeric() => {
+                    self.jump_to_project_by_char(c);
+                }
                 _ => {}
             }
         } else if self.show_filter_panel {
@@ -810,6 +813,17 @@ impl App {
         let len = self.filtered_projects.len();
         if len > 0 {
             self.project_selector_state.select(Some(len - 1));
+        }
+    }
+
+    fn jump_to_project_by_char(&mut self, c: char) {
+        let target = c.to_ascii_lowercase();
+        if let Some(idx) = self
+            .filtered_projects
+            .iter()
+            .position(|p| p.name.chars().next().map(|c| c.to_ascii_lowercase()) == Some(target))
+        {
+            self.project_selector_state.select(Some(idx));
         }
     }
 
@@ -1492,7 +1506,9 @@ impl App {
 
         let mut help_spans = vec![
             Span::styled("Controls: ", Style::default().fg(Color::Yellow)),
-            Span::raw("↑↓/jk: Navigate  │  /: Search  │  Enter: Select  │  p/Esc: Cancel"),
+            Span::raw(
+                "↑↓/jk: Navigate  │  a-z: Jump  │  /: Search  │  Enter: Select  │  p/Esc: Cancel",
+            ),
         ];
 
         if !self.project_search_query.is_empty() {
