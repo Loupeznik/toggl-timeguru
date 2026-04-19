@@ -12,7 +12,10 @@ permissions:
 jobs:
   release:
     name: goreleaser
-    runs-on: ubuntu-latest
+    # Pinned to 22.04 so the host matches snap base: core22 when
+    # SNAPCRAFT_BUILD_ENVIRONMENT=host is used. Revisit when the snap base
+    # moves to core24 (then ubuntu-24.04 / ubuntu-latest is correct).
+    runs-on: ubuntu-22.04
     environment:
       name: production
     steps:
@@ -42,7 +45,7 @@ jobs:
           version: 0.13.0
 
       - name: Install cargo-zigbuild
-        run: cargo install --locked cargo-zigbuild
+        run: cargo install --locked --version 0.22.2 cargo-zigbuild
 
       - name: Install snapcraft
         run: sudo snap install snapcraft --classic
