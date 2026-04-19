@@ -462,6 +462,7 @@ async fn handle_tui(
         db,
         project_usage,
         config.project_sort_method,
+        config.saved_filter.clone(),
     );
     let grouped = group_by_description(app.time_entries.clone());
     app.grouped_entries = grouped;
@@ -471,6 +472,12 @@ async fn handle_tui(
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
+
+    let mut updated_config = Config::load().unwrap_or(config);
+    updated_config.saved_filter = app.persisted_filter();
+    if let Err(e) = updated_config.save() {
+        tracing::warn!("Failed to persist filter state: {}", e);
+    }
 
     if let Err(err) = res {
         println!("Error: {:?}", err);

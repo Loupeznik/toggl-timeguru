@@ -162,11 +162,11 @@
 - [ ] Calculate billable vs non-billable hours
 
 ### Interactive TUI Filtering
-- [ ] Add project filtering UI to TUI filter panel
-- [ ] Add tag filtering UI to TUI filter panel
-- [ ] Add client filtering UI to TUI filter panel
-- [ ] Add filter persistence across TUI sessions
-- [ ] Add visual indicators for active filters in entry list
+- [x] Add project filtering UI to TUI filter panel (multi-select)
+- [x] Add tag filtering UI to TUI filter panel (multi-select)
+- [ ] Add client filtering UI to TUI filter panel (deferred — no Client model yet)
+- [x] Add filter persistence across TUI sessions
+- [x] Add visual indicators for active filters in entry list
 
 ### Project Selector Enhancements
 - [x] Sort projects by usage in last month (most used first)

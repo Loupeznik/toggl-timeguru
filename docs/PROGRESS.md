@@ -249,21 +249,20 @@ This document tracks the development progress across all phases of the Toggl Tim
   - [ ] Add to all report types
   - [ ] Show percentages
 
-### v1.2.1 Interactive TUI Filtering (PLANNED)
-- [ ] Add project filtering UI to TUI filter panel
-  - [ ] Multi-select project filter
-  - [ ] Visual indication of active filters
-- [ ] Add tag filtering UI to TUI filter panel
-  - [ ] Multi-select tag filter
-  - [ ] Show tag counts
-- [ ] Add client filtering UI to TUI filter panel
-  - [ ] Single-select client filter
-- [ ] Add filter persistence across TUI sessions
-  - [ ] Save active filters to config
-  - [ ] Restore on next launch
-- [ ] Add visual indicators for active filters in entry list
-  - [ ] Badge showing filter count
-  - [ ] Highlight filtered entries
+### v1.2.1 Interactive TUI Filtering (IN PROGRESS)
+- [x] Add project filtering UI to TUI filter panel
+  - [x] Multi-select project filter (Projects section, Enter/Space to toggle)
+  - [x] Visual indication of active filters (● mark on section header, list checkboxes)
+- [x] Add tag filtering UI to TUI filter panel
+  - [x] Multi-select tag filter (Tags section, tags pulled from loaded entries)
+  - [ ] Show tag counts (deferred to a later polish pass)
+- [ ] Add client filtering UI to TUI filter panel (deferred — no Client model/names yet)
+- [x] Add filter persistence across TUI sessions
+  - [x] Save active filters to config on TUI exit
+  - [x] Restore on next launch (stale ids/tags pruned)
+- [x] Add visual indicators for active filters in entry list
+  - [x] Status line shows `[FILTERED: ...]` with per-filter breakdown
+  - [x] Filter panel title shows active filter count
 
 ### v1.2.1 Project Selector Enhancements (IN PROGRESS)
 - [x] Sort projects by usage in last month

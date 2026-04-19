@@ -11,7 +11,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
-use crate::config::ProjectSortMethod;
+use crate::config::{PersistedFilter, ProjectSortMethod};
 use crate::processor::TimeEntryFilter;
 use crate::toggl::TogglClient;
 use crate::toggl::models::{GroupedTimeEntry, Project, TimeEntry};
@@ -22,6 +22,39 @@ const PAGE_SIZE: usize = 10;
 const POPUP_MARGIN: u16 = 10;
 const POPUP_MAX_WIDTH: u16 = 80;
 const POPUP_MAX_HEIGHT: u16 = 20;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilterSection {
+    Billable,
+    Projects,
+    Tags,
+}
+
+impl FilterSection {
+    fn next(self) -> Self {
+        match self {
+            Self::Billable => Self::Projects,
+            Self::Projects => Self::Tags,
+            Self::Tags => Self::Billable,
+        }
+    }
+
+    fn prev(self) -> Self {
+        match self {
+            Self::Billable => Self::Tags,
+            Self::Projects => Self::Billable,
+            Self::Tags => Self::Projects,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Billable => "Billable",
+            Self::Projects => "Projects",
+            Self::Tags => "Tags",
+        }
+    }
+}
 
 fn sort_projects(projects: &mut [Project], method: ProjectSortMethod, usage: &HashMap<i64, usize>) {
     match method {
@@ -54,6 +87,10 @@ pub struct App {
     pub round_minutes: Option<i64>,
     pub projects: HashMap<i64, Project>,
     pub show_filter_panel: bool,
+    pub filter_section: FilterSection,
+    pub filter_projects_state: ListState,
+    pub filter_tags_state: ListState,
+    pub available_tags: Vec<String>,
     pub active_filter: TimeEntryFilter,
     pub clipboard_message: Option<String>,
     pub show_project_selector: bool,
@@ -89,12 +126,8 @@ impl App {
         db: Arc<crate::db::Database>,
         project_usage: HashMap<i64, usize>,
         project_sort_method: ProjectSortMethod,
+        saved_filter: PersistedFilter,
     ) -> Self {
-        let mut list_state = ListState::default();
-        if !time_entries.is_empty() {
-            list_state.select(Some(0));
-        }
-
         let projects_map: HashMap<i64, Project> =
             projects.iter().map(|p| (p.id, p.clone())).collect();
         let project_usage_total: usize = project_usage.values().sum();
@@ -108,8 +141,49 @@ impl App {
             project_selector_state.select(Some(0));
         }
 
+        let mut available_tags: Vec<String> = HashSet::<String>::from_iter(
+            all_entries
+                .iter()
+                .filter_map(|e| e.tags.as_ref())
+                .flatten()
+                .cloned(),
+        )
+        .into_iter()
+        .collect();
+        available_tags.sort_by_key(|t| t.to_lowercase());
+
+        let mut active_filter = TimeEntryFilter::new();
+        for pid in saved_filter.project_ids {
+            if projects_map.contains_key(&pid) {
+                active_filter.project_ids.insert(pid);
+            }
+        }
+        for tag in saved_filter.tags {
+            if available_tags.contains(&tag) {
+                active_filter.tags.insert(tag);
+            }
+        }
+        active_filter.billable_only = saved_filter.billable_only;
+
+        let projects_vec: Vec<Project> = projects_map.values().cloned().collect();
+        let filtered_entries = active_filter.apply(all_entries.clone(), &projects_vec);
+
+        let mut list_state = ListState::default();
+        if !filtered_entries.is_empty() {
+            list_state.select(Some(0));
+        }
+
+        let mut filter_projects_state = ListState::default();
+        if !filtered_projects.is_empty() {
+            filter_projects_state.select(Some(0));
+        }
+        let mut filter_tags_state = ListState::default();
+        if !available_tags.is_empty() {
+            filter_tags_state.select(Some(0));
+        }
+
         Self {
-            time_entries,
+            time_entries: filtered_entries,
             grouped_entries: Vec::new(),
             all_entries,
             list_state,
@@ -123,7 +197,11 @@ impl App {
             round_minutes,
             projects: projects_map,
             show_filter_panel: false,
-            active_filter: TimeEntryFilter::new(),
+            filter_section: FilterSection::Billable,
+            filter_projects_state,
+            filter_tags_state,
+            available_tags,
+            active_filter,
             clipboard_message: None,
             show_project_selector: false,
             project_selector_state,
@@ -262,6 +340,21 @@ impl App {
             match key.code {
                 KeyCode::Esc | KeyCode::Char('f') => {
                     self.show_filter_panel = false;
+                }
+                KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
+                    self.filter_section = self.filter_section.next();
+                }
+                KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
+                    self.filter_section = self.filter_section.prev();
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.filter_section_next();
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.filter_section_previous();
+                }
+                KeyCode::Enter | KeyCode::Char(' ') => {
+                    self.toggle_filter_selection();
                 }
                 KeyCode::Char('b') => {
                     self.toggle_billable_filter();
@@ -659,17 +752,99 @@ impl App {
     }
 
     fn toggle_billable_filter(&mut self) {
-        self.active_filter = if self.active_filter.billable_only {
-            TimeEntryFilter::new()
-        } else {
-            TimeEntryFilter::new().with_billable_only()
-        };
+        self.active_filter.billable_only = !self.active_filter.billable_only;
         self.apply_filters();
     }
 
     fn clear_filters(&mut self) {
         self.active_filter = TimeEntryFilter::new();
         self.apply_filters();
+    }
+
+    fn filter_section_len(&self) -> usize {
+        match self.filter_section {
+            FilterSection::Billable => 0,
+            FilterSection::Projects => self.filtered_projects.len(),
+            FilterSection::Tags => self.available_tags.len(),
+        }
+    }
+
+    fn filter_section_state(&mut self) -> Option<&mut ListState> {
+        match self.filter_section {
+            FilterSection::Billable => None,
+            FilterSection::Projects => Some(&mut self.filter_projects_state),
+            FilterSection::Tags => Some(&mut self.filter_tags_state),
+        }
+    }
+
+    fn filter_section_next(&mut self) {
+        let len = self.filter_section_len();
+        if len == 0 {
+            return;
+        }
+        if let Some(state) = self.filter_section_state() {
+            let i = state.selected().map(|i| (i + 1) % len).unwrap_or(0);
+            state.select(Some(i));
+        }
+    }
+
+    fn filter_section_previous(&mut self) {
+        let len = self.filter_section_len();
+        if len == 0 {
+            return;
+        }
+        if let Some(state) = self.filter_section_state() {
+            let i = state
+                .selected()
+                .map(|i| if i == 0 { len - 1 } else { i - 1 })
+                .unwrap_or(0);
+            state.select(Some(i));
+        }
+    }
+
+    fn toggle_filter_selection(&mut self) {
+        match self.filter_section {
+            FilterSection::Billable => {
+                self.toggle_billable_filter();
+            }
+            FilterSection::Projects => {
+                if let Some(idx) = self.filter_projects_state.selected()
+                    && let Some(project) = self.filtered_projects.get(idx)
+                {
+                    let pid = project.id;
+                    if self.active_filter.project_ids.contains(&pid) {
+                        self.active_filter.project_ids.remove(&pid);
+                    } else {
+                        self.active_filter.project_ids.insert(pid);
+                    }
+                    self.apply_filters();
+                }
+            }
+            FilterSection::Tags => {
+                if let Some(idx) = self.filter_tags_state.selected()
+                    && let Some(tag) = self.available_tags.get(idx).cloned()
+                {
+                    if self.active_filter.tags.contains(&tag) {
+                        self.active_filter.tags.remove(&tag);
+                    } else {
+                        self.active_filter.tags.insert(tag);
+                    }
+                    self.apply_filters();
+                }
+            }
+        }
+    }
+
+    pub fn persisted_filter(&self) -> PersistedFilter {
+        let mut project_ids: Vec<i64> = self.active_filter.project_ids.iter().copied().collect();
+        project_ids.sort();
+        let mut tags: Vec<String> = self.active_filter.tags.iter().cloned().collect();
+        tags.sort();
+        PersistedFilter {
+            project_ids,
+            tags,
+            billable_only: self.active_filter.billable_only,
+        }
     }
 
     fn apply_filters(&mut self) {
@@ -1289,7 +1464,7 @@ impl App {
                 .constraints([
                     Constraint::Length(3),
                     Constraint::Min(0),
-                    Constraint::Length(8),
+                    Constraint::Length(14),
                     Constraint::Length(4),
                 ])
                 .split(f.area());
@@ -1486,48 +1661,163 @@ impl App {
         f.render_stateful_widget(list, area, &mut self.list_state);
     }
 
-    fn render_filter_panel(&self, f: &mut Frame, area: Rect) {
-        let billable_status = if self.active_filter.billable_only {
-            "ACTIVE"
-        } else {
-            "OFF"
-        };
+    fn render_filter_panel(&mut self, f: &mut Frame, area: Rect) {
+        let title = format!("Filters — {} active", self.active_filter.active_count());
+        let outer = Block::default().borders(Borders::ALL).title(title);
+        let inner = outer.inner(area);
+        f.render_widget(outer, area);
 
-        let filter_lines = vec![
-            Line::from(vec![Span::styled(
-                "Active Filters:",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("  Billable Only: ", Style::default().fg(Color::Cyan)),
-                Span::styled(
-                    billable_status,
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Min(1),
+                Constraint::Length(1),
+            ])
+            .split(inner);
+
+        let header_spans: Vec<Span> = [
+            FilterSection::Billable,
+            FilterSection::Projects,
+            FilterSection::Tags,
+        ]
+        .iter()
+        .enumerate()
+        .flat_map(|(i, section)| {
+            let active = *section == self.filter_section;
+            let count_hint = match section {
+                FilterSection::Billable => {
                     if self.active_filter.billable_only {
+                        " (on)"
+                    } else {
+                        ""
+                    }
+                }
+                FilterSection::Projects => {
+                    if self.active_filter.project_ids.is_empty() {
+                        ""
+                    } else {
+                        " ●"
+                    }
+                }
+                FilterSection::Tags => {
+                    if self.active_filter.tags.is_empty() {
+                        ""
+                    } else {
+                        " ●"
+                    }
+                }
+            };
+            let label = format!("[{}{}]", section.label(), count_hint);
+            let style = if active {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Gray)
+            };
+            let mut v = vec![Span::styled(label, style)];
+            if i < 2 {
+                v.push(Span::raw(" "));
+            }
+            v
+        })
+        .collect();
+
+        let header = Paragraph::new(Line::from(header_spans));
+        f.render_widget(header, rows[0]);
+
+        let help_line = Line::from(vec![Span::styled(
+            "Tab/←→: Section  │  ↑↓/jk: Move  │  Enter/Space: Toggle  │  b: Billable  │  c: Clear  │  f/Esc: Close",
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
+        )]);
+        f.render_widget(Paragraph::new(help_line), rows[2]);
+
+        match self.filter_section {
+            FilterSection::Billable => {
+                let (billable_label, billable_style) = if self.active_filter.billable_only {
+                    (
+                        "Billable only: ON",
                         Style::default()
                             .fg(Color::Green)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(Color::DarkGray)
-                    },
-                ),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Filter Controls:",
-                Style::default().fg(Color::Yellow),
-            )]),
-            Line::from(vec![Span::raw(
-                "  b: Toggle Billable Only  │  c: Clear All Filters  │  f/Esc: Close Panel",
-            )]),
-        ];
-
-        let panel = Paragraph::new(filter_lines)
-            .style(Style::default().fg(Color::Gray))
-            .block(Block::default().borders(Borders::ALL).title("Filters"));
-
-        f.render_widget(panel, area);
+                            .add_modifier(Modifier::BOLD),
+                    )
+                } else {
+                    ("Billable only: OFF", Style::default().fg(Color::Gray))
+                };
+                let body = Paragraph::new(vec![
+                    Line::from(""),
+                    Line::from(Span::styled(billable_label, billable_style)),
+                    Line::from(""),
+                    Line::from(Span::styled(
+                        "Press Enter/Space (or 'b') to toggle.",
+                        Style::default().fg(Color::DarkGray),
+                    )),
+                ]);
+                f.render_widget(body, rows[1]);
+            }
+            FilterSection::Projects => {
+                let items: Vec<ListItem> = self
+                    .filtered_projects
+                    .iter()
+                    .map(|p| {
+                        let selected = self.active_filter.project_ids.contains(&p.id);
+                        let mark = if selected { "[x]" } else { "[ ]" };
+                        let color = Self::parse_color(&p.color);
+                        ListItem::new(Line::from(vec![
+                            Span::raw(mark),
+                            Span::raw(" "),
+                            Span::styled(
+                                p.name.clone(),
+                                Style::default().fg(color).add_modifier(Modifier::BOLD),
+                            ),
+                        ]))
+                    })
+                    .collect();
+                let list = List::new(items)
+                    .highlight_style(
+                        Style::default()
+                            .bg(Color::DarkGray)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .highlight_symbol("> ");
+                f.render_stateful_widget(list, rows[1], &mut self.filter_projects_state);
+            }
+            FilterSection::Tags => {
+                if self.available_tags.is_empty() {
+                    let body = Paragraph::new(Line::from(Span::styled(
+                        "No tags found in the loaded entries.",
+                        Style::default().fg(Color::DarkGray),
+                    )));
+                    f.render_widget(body, rows[1]);
+                } else {
+                    let items: Vec<ListItem> = self
+                        .available_tags
+                        .iter()
+                        .map(|t| {
+                            let selected = self.active_filter.tags.contains(t);
+                            let mark = if selected { "[x]" } else { "[ ]" };
+                            ListItem::new(Line::from(vec![
+                                Span::raw(mark),
+                                Span::raw(" "),
+                                Span::styled(t.clone(), Style::default().fg(Color::Cyan)),
+                            ]))
+                        })
+                        .collect();
+                    let list = List::new(items)
+                        .highlight_style(
+                            Style::default()
+                                .bg(Color::DarkGray)
+                                .add_modifier(Modifier::BOLD),
+                        )
+                        .highlight_symbol("> ");
+                    f.render_stateful_widget(list, rows[1], &mut self.filter_tags_state);
+                }
+            }
+        }
     }
 
     fn render_project_selector_panel(&mut self, f: &mut Frame, area: Rect) {
@@ -1626,10 +1916,23 @@ impl App {
         let day_grouping_status = if self.group_by_day { "ON" } else { "OFF" };
         let sort_status = if self.sort_by_date { "ON" } else { "OFF" };
         let rounding_status = if self.show_rounded { "ON" } else { "OFF" };
-        let filter_indicator = if self.active_filter.billable_only {
-            " [FILTERED]"
+        let filter_indicator = if self.active_filter.is_active() {
+            let mut parts: Vec<String> = Vec::new();
+            if self.active_filter.billable_only {
+                parts.push("billable".to_string());
+            }
+            if !self.active_filter.project_ids.is_empty() {
+                parts.push(format!(
+                    "{} project(s)",
+                    self.active_filter.project_ids.len()
+                ));
+            }
+            if !self.active_filter.tags.is_empty() {
+                parts.push(format!("{} tag(s)", self.active_filter.tags.len()));
+            }
+            format!(" [FILTERED: {}]", parts.join(", "))
         } else {
-            ""
+            String::new()
         };
 
         let len = if self.show_grouped {
@@ -1668,7 +1971,7 @@ impl App {
                 Span::styled("Status: ", Style::default().fg(Color::Cyan)),
                 Span::raw(format!("Entry {}/{}", selected_pos, len)),
                 Span::styled(
-                    filter_indicator,
+                    filter_indicator.clone(),
                     Style::default()
                         .fg(Color::Green)
                         .add_modifier(Modifier::BOLD),

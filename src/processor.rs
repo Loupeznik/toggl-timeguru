@@ -120,52 +120,69 @@ pub fn filter_by_client(
         .collect()
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
 pub struct TimeEntryFilter {
-    pub project_id: Option<i64>,
-    pub tag: Option<String>,
-    pub client_id: Option<i64>,
+    pub project_ids: std::collections::HashSet<i64>,
+    pub tags: std::collections::HashSet<String>,
     pub billable_only: bool,
 }
 
-#[allow(dead_code)]
 impl TimeEntryFilter {
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[allow(dead_code)]
     pub fn with_project(mut self, project_id: i64) -> Self {
-        self.project_id = Some(project_id);
+        self.project_ids.insert(project_id);
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_tag(mut self, tag: String) -> Self {
-        self.tag = Some(tag);
+        self.tags.insert(tag);
         self
     }
 
-    pub fn with_client(mut self, client_id: i64) -> Self {
-        self.client_id = Some(client_id);
-        self
-    }
-
+    #[allow(dead_code)]
     pub fn with_billable_only(mut self) -> Self {
         self.billable_only = true;
         self
     }
 
-    pub fn apply(&self, mut entries: Vec<TimeEntry>, projects: &[Project]) -> Vec<TimeEntry> {
-        if let Some(project_id) = self.project_id {
-            entries = filter_by_project(entries, project_id);
+    pub fn is_active(&self) -> bool {
+        !self.project_ids.is_empty() || !self.tags.is_empty() || self.billable_only
+    }
+
+    pub fn active_count(&self) -> usize {
+        let mut n = 0;
+        if !self.project_ids.is_empty() {
+            n += 1;
+        }
+        if !self.tags.is_empty() {
+            n += 1;
+        }
+        if self.billable_only {
+            n += 1;
+        }
+        n
+    }
+
+    pub fn apply(&self, mut entries: Vec<TimeEntry>, _projects: &[Project]) -> Vec<TimeEntry> {
+        if !self.project_ids.is_empty() {
+            entries.retain(|e| match e.project_id {
+                Some(pid) => self.project_ids.contains(&pid),
+                None => false,
+            });
         }
 
-        if let Some(ref tag) = self.tag {
-            entries = filter_by_tag(entries, tag);
-        }
-
-        if let Some(client_id) = self.client_id {
-            entries = filter_by_client(entries, client_id, projects);
+        if !self.tags.is_empty() {
+            entries.retain(|e| {
+                e.tags
+                    .as_ref()
+                    .map(|ts| ts.iter().any(|t| self.tags.contains(t)))
+                    .unwrap_or(false)
+            });
         }
 
         if self.billable_only {
@@ -371,7 +388,7 @@ mod tests {
         let entries = vec![entry1, entry2, entry3];
 
         let filter = TimeEntryFilter::new()
-            .with_client(100)
+            .with_project(1)
             .with_tag("urgent".to_string());
 
         let filtered = filter.apply(entries, &projects);

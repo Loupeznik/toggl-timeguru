@@ -11,6 +11,18 @@ pub struct Config {
     pub current_user_email: Option<String>,
     #[serde(default)]
     pub project_sort_method: ProjectSortMethod,
+    #[serde(default)]
+    pub saved_filter: PersistedFilter,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct PersistedFilter {
+    #[serde(default)]
+    pub project_ids: Vec<i64>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub billable_only: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -50,6 +62,7 @@ impl Default for Config {
             current_user_id: None,
             current_user_email: None,
             project_sort_method: ProjectSortMethod::Name,
+            saved_filter: PersistedFilter::default(),
         }
     }
 }
