@@ -405,6 +405,10 @@ impl App {
                 KeyCode::Char('f') => {
                     self.toggle_filter_panel();
                 }
+                KeyCode::Char('c') if self.active_filter.is_active() => {
+                    self.clear_filters();
+                    self.status_message = Some("Filters cleared".to_string());
+                }
                 KeyCode::Char('y') => {
                     self.copy_to_clipboard();
                 }
@@ -1958,6 +1962,7 @@ impl App {
                 Span::raw(format!("s:Sort({}) ", sort_status)),
                 Span::raw(format!("r:Round({}) ", rounding_status)),
                 Span::raw("f:Filter "),
+                Span::raw("c:ClearFilters "),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
                 Span::raw("p:Project "),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
