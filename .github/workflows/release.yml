@@ -1,156 +1,74 @@
-name: Release
+name: release
 
 on:
   push:
-    tags:
-      - 'v*'
-
-env:
-  CARGO_TERM_COLOR: always
+    tags: ['v*']
 
 permissions:
   contents: write
+  packages: write
+  id-token: write
 
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
-    steps:
-      - name: Get version from tag
-        id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Check if preview release
-        id: check_preview
-        run: |
-          if [[ "${{ github.ref_name }}" == *"preview"* ]]; then
-            echo "is_preview=true" >> $GITHUB_OUTPUT
-          else
-            echo "is_preview=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: ${{ steps.check_preview.outputs.is_preview }}
-
-  build:
-    name: Build
-    needs: create-release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            asset_name: toggl-timeguru-v${{ needs.create-release.outputs.version }}-linux-x86_64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            asset_name: toggl-timeguru-v${{ needs.create-release.outputs.version }}-linux-arm64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            asset_name: toggl-timeguru-v${{ needs.create-release.outputs.version }}-macos-x86_64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            asset_name: toggl-timeguru-v${{ needs.create-release.outputs.version }}-macos-arm64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            asset_name: toggl-timeguru-v${{ needs.create-release.outputs.version }}-windows-x86_64.exe
-
+  release:
+    name: goreleaser
+    # Pinned to 22.04 so the host matches snap base: core22 when
+    # SNAPCRAFT_BUILD_ENVIRONMENT=host is used. Revisit when the snap base
+    # moves to core24 (then ubuntu-24.04 / ubuntu-latest is correct).
+    runs-on: ubuntu-22.04
+    environment:
+      name: production
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          fetch-depth: 0
 
-      - name: Install cross-compilation tools (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          cargo install cross --git https://github.com/cross-rs/cross
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu,x86_64-apple-darwin,aarch64-apple-darwin,x86_64-pc-windows-gnu
 
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
           path: ~/.cargo/registry
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache cargo index
         uses: actions/cache@v4
         with:
           path: ~/.cargo/git
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Cache target directory
-        uses: actions/cache@v4
+      - name: Install zig (for cargo-zigbuild)
+        uses: mlugg/setup-zig@v2
         with:
-          path: target
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          version: 0.13.0
 
-      - name: Build (cross)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: cross build --release --target ${{ matrix.target }}
+      - name: Install cargo-zigbuild
+        run: cargo install --locked --version 0.22.2 cargo-zigbuild
 
-      - name: Build (native)
-        if: matrix.target != 'aarch64-unknown-linux-gnu'
-        run: cargo build --release --target ${{ matrix.target }}
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
 
-      - name: Strip binary (Linux)
-        if: runner.os == 'Linux' && matrix.target == 'x86_64-unknown-linux-gnu'
-        run: strip target/${{ matrix.target }}/release/toggl-timeguru
+      - uses: docker/setup-qemu-action@v3
 
-      - name: Strip binary (macOS)
-        if: runner.os == 'macOS'
-        run: strip target/${{ matrix.target }}/release/toggl-timeguru
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Prepare binary (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          cp target/${{ matrix.target }}/release/toggl-timeguru ${{ matrix.asset_name }}
-          chmod +x ${{ matrix.asset_name }}
+      - uses: sigstore/cosign-installer@v3.7.0
 
-      - name: Prepare binary (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Copy-Item target/${{ matrix.target }}/release/toggl-timeguru.exe ${{ matrix.asset_name }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate SHA256 checksum (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          sha256sum ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
-
-      - name: Generate SHA256 checksum (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          $hash = (Get-FileHash -Path ${{ matrix.asset_name }} -Algorithm SHA256).Hash.ToLower()
-          "$hash  ${{ matrix.asset_name }}" | Out-File -FilePath ${{ matrix.asset_name }}.sha256 -Encoding ASCII
-
-      - name: Upload binary
-        uses: actions/upload-release-asset@v1
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2.15'
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ matrix.asset_name }}
-          asset_name: ${{ matrix.asset_name }}
-          asset_content_type: application/octet-stream
-
-      - name: Upload checksum
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ matrix.asset_name }}.sha256
-          asset_name: ${{ matrix.asset_name }}.sha256
-          asset_content_type: text/plain
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+          SNAPCRAFT_BUILD_ENVIRONMENT: host

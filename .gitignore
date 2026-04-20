@@ -31,3 +31,7 @@ target
 
 # Test CSV exports
 *.csv
+
+# goreleaser output
+dist/
+.intentionally-empty-file.o
