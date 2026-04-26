@@ -146,7 +146,7 @@ toggl-timeguru tui --start 2025-01-01 --end 2025-01-31
 - `c` - Clear active filters when filters are applied
 - `p` - Open project selector to assign project (works on individual or grouped entries)
 - `e` - Edit description (works on individual or grouped entries, batch edit supported)
-- `y` - Copy selected entry description to clipboard when clipboard support is enabled
+- `y` - Copy selected entry description to clipboard
 - `q`/`Esc` - Quit
 
 #### `export` - Export time entries to CSV
