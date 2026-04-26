@@ -25,7 +25,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu,x86_64-apple-darwin,aarch64-apple-darwin,x86_64-pc-windows-gnu
+          targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu,x86_64-pc-windows-gnu
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -68,7 +68,130 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
           SNAPCRAFT_BUILD_ENVIRONMENT: host
+
+  macos-artifacts:
+    name: macOS artifacts
+    needs: release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build macOS binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release --target x86_64-apple-darwin
+          cargo build --locked --release --target aarch64-apple-darwin
+
+      - name: Package macOS archives
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/macos
+
+          package_archive() {
+            target="$1"
+            arch="$2"
+            archive_dir="dist/macos/toggl-timeguru_${version}_darwin_${arch}"
+
+            rm -rf "$archive_dir"
+            mkdir -p "$archive_dir"
+            cp "target/${target}/release/toggl-timeguru" "$archive_dir/"
+            cp LICENSE README.md "$archive_dir/"
+            tar -C "$archive_dir" -czf "${archive_dir}.tar.gz" toggl-timeguru LICENSE README.md
+          }
+
+          package_archive x86_64-apple-darwin amd64
+          package_archive aarch64-apple-darwin arm64
+          shasum -a 256 dist/macos/*.tar.gz > dist/macos/macos-checksums.txt
+
+      - name: Upload macOS archives
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist/checksums
+          gh release download "$GITHUB_REF_NAME" --pattern checksums.txt --dir dist/checksums
+
+          checksum_file="dist/checksums/checksums.txt"
+          grep -v 'toggl-timeguru_.*_darwin_.*\.tar\.gz' "$checksum_file" > "${checksum_file}.tmp" || true
+          cat "${checksum_file}.tmp" dist/macos/macos-checksums.txt > "$checksum_file"
+          rm "${checksum_file}.tmp"
+
+          gh release upload "$GITHUB_REF_NAME" dist/macos/*.tar.gz "$checksum_file" --clobber
+
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: Loupeznik/homebrew-tap
+          path: homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Update Homebrew cask
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME#v}"
+          amd64_sha="$(shasum -a 256 dist/macos/toggl-timeguru_${version}_darwin_amd64.tar.gz | awk '{print $1}')"
+          arm64_sha="$(shasum -a 256 dist/macos/toggl-timeguru_${version}_darwin_arm64.tar.gz | awk '{print $1}')"
+          cask_path="homebrew-tap/Casks/toggl-timeguru.rb"
+
+          mkdir -p "$(dirname "$cask_path")"
+          cat > "$cask_path" <<EOF_CASK
+          cask "toggl-timeguru" do
+            arch arm: "arm64", intel: "amd64"
+
+            version "$version"
+            sha256 arm:   "$arm64_sha",
+                   intel: "$amd64_sha"
+
+            url "https://github.com/Loupeznik/toggl-timeguru/releases/download/v#{version}/toggl-timeguru_#{version}_darwin_#{arch}.tar.gz"
+            name "Toggl TimeGuru"
+            desc "CLI + TUI for managing and analyzing Toggl Track time entries"
+            homepage "https://github.com/Loupeznik/toggl-timeguru"
+
+            binary "toggl-timeguru"
+
+            postflight do
+              system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/toggl-timeguru"]
+            end
+          end
+          EOF_CASK
+
+          ruby -e "require 'ripper'; abort 'invalid cask ruby' unless Ripper.sexp(File.read('$cask_path'))"
+
+          cd homebrew-tap
+          git config user.name "goreleaserbot"
+          git config user.email "bot@goreleaser.com"
+          git add Casks/toggl-timeguru.rb
+
+          if git diff --cached --quiet; then
+            echo "Homebrew cask already up to date"
+          else
+            git commit -m "Update toggl-timeguru to v${version}"
+            git push
+          fi

@@ -1,5 +1,4 @@
 use anyhow::Result;
-#[cfg(feature = "clipboard")]
 use arboard::Clipboard;
 use chrono::{DateTime, Utc};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -952,8 +951,8 @@ impl App {
         }
     }
 
-    fn selected_description(&self) -> Option<String> {
-        if self.show_grouped {
+    fn copy_to_clipboard(&mut self) {
+        let description = if self.show_grouped {
             self.list_state.selected().and_then(|i| {
                 self.grouped_entries
                     .get(i)
@@ -965,37 +964,24 @@ impl App {
                     .get(i)
                     .and_then(|entry| entry.description.clone())
             })
-        }
-    }
-
-    fn copy_to_clipboard(&mut self) {
-        let Some(desc) = self.selected_description() else {
-            self.clipboard_message = Some("No description to copy".to_string());
-            return;
         };
 
-        self.copy_description_to_clipboard(desc);
-    }
-
-    #[cfg(feature = "clipboard")]
-    fn copy_description_to_clipboard(&mut self, desc: String) {
-        match Clipboard::new() {
-            Ok(mut clipboard) => {
-                if clipboard.set_text(&desc).is_ok() {
-                    self.clipboard_message = Some(format!("Copied: {}", desc));
-                } else {
-                    self.clipboard_message = Some("Failed to copy to clipboard".to_string());
+        if let Some(desc) = description {
+            match Clipboard::new() {
+                Ok(mut clipboard) => {
+                    if clipboard.set_text(&desc).is_ok() {
+                        self.clipboard_message = Some(format!("Copied: {}", desc));
+                    } else {
+                        self.clipboard_message = Some("Failed to copy to clipboard".to_string());
+                    }
+                }
+                Err(_) => {
+                    self.clipboard_message = Some("Clipboard unavailable".to_string());
                 }
             }
-            Err(_) => {
-                self.clipboard_message = Some("Clipboard unavailable".to_string());
-            }
+        } else {
+            self.clipboard_message = Some("No description to copy".to_string());
         }
-    }
-
-    #[cfg(not(feature = "clipboard"))]
-    fn copy_description_to_clipboard(&mut self, _desc: String) {
-        self.clipboard_message = Some("Clipboard unavailable in this build".to_string());
     }
 
     fn next_project(&mut self) {
