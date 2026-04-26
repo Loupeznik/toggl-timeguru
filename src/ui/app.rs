@@ -70,6 +70,27 @@ fn sort_projects(projects: &mut [Project], method: ProjectSortMethod, usage: &Ha
     }
 }
 
+fn format_rate_limit_reset_duration(seconds: u32) -> String {
+    let hours = seconds / 3600;
+    let minutes = (seconds % 3600) / 60;
+    let seconds = seconds % 60;
+    let mut parts = Vec::new();
+
+    if hours > 0 {
+        parts.push(format!("{hours}h"));
+    }
+
+    if minutes > 0 {
+        parts.push(format!("{minutes}m"));
+    }
+
+    if seconds > 0 || parts.is_empty() {
+        parts.push(format!("{seconds}s"));
+    }
+
+    parts.join(" ")
+}
+
 pub struct App {
     pub time_entries: Vec<TimeEntry>,
     pub grouped_entries: Vec<GroupedTimeEntry>,
@@ -1966,7 +1987,10 @@ impl App {
         let info = self.client.as_ref()?.get_rate_limit_info()?;
         let remaining = info.remaining?;
         match info.resets_in {
-            Some(resets_in) => Some(format!("{remaining} req left, resets in {resets_in}s")),
+            Some(resets_in) => Some(format!(
+                "{remaining} req left, resets in {}",
+                format_rate_limit_reset_duration(resets_in)
+            )),
             None => Some(format!("{remaining} req left")),
         }
     }
@@ -2255,5 +2279,28 @@ impl App {
             .style(Style::default().bg(Color::Black));
 
         f.render_widget(paragraph, inner_area);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_rate_limit_reset_duration;
+
+    #[test]
+    fn formats_rate_limit_reset_duration_as_seconds() {
+        assert_eq!(format_rate_limit_reset_duration(0), "0s");
+        assert_eq!(format_rate_limit_reset_duration(42), "42s");
+    }
+
+    #[test]
+    fn formats_rate_limit_reset_duration_as_minutes_and_seconds() {
+        assert_eq!(format_rate_limit_reset_duration(60), "1m");
+        assert_eq!(format_rate_limit_reset_duration(125), "2m 5s");
+    }
+
+    #[test]
+    fn formats_rate_limit_reset_duration_as_hours_minutes_and_seconds() {
+        assert_eq!(format_rate_limit_reset_duration(3600), "1h");
+        assert_eq!(format_rate_limit_reset_duration(3723), "1h 2m 3s");
     }
 }
