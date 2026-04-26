@@ -1962,11 +1962,21 @@ impl App {
         f.render_widget(help_para, chunks[1]);
     }
 
+    fn rate_limit_footer_text(&self) -> Option<String> {
+        let info = self.client.as_ref()?.get_rate_limit_info()?;
+        let remaining = info.remaining?;
+        match info.resets_in {
+            Some(resets_in) => Some(format!("{remaining} req left, reset in {resets_in}s")),
+            None => Some(format!("{remaining} req left")),
+        }
+    }
+
     fn render_footer(&self, f: &mut Frame, area: Rect) {
         let grouping_status = if self.show_grouped { "ON" } else { "OFF" };
         let day_grouping_status = if self.group_by_day { "ON" } else { "OFF" };
         let sort_status = if self.sort_by_date { "ON" } else { "OFF" };
         let rounding_status = if self.show_rounded { "ON" } else { "OFF" };
+        let rate_limit_indicator = self.rate_limit_footer_text();
         let filter_indicator = if self.active_filter.is_active() {
             let mut parts: Vec<String> = Vec::new();
             if self.active_filter.billable_only {
@@ -2038,6 +2048,16 @@ impl App {
                 )),
             ]),
         ];
+
+        if let Some(rate_limit) = rate_limit_indicator {
+            footer_lines[1]
+                .spans
+                .push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
+            footer_lines[1]
+                .spans
+                .push(Span::styled("API: ", Style::default().fg(Color::Cyan)));
+            footer_lines[1].spans.push(Span::raw(rate_limit));
+        }
 
         if let Some(ref msg) = self.clipboard_message {
             footer_lines.push(Line::from(vec![
