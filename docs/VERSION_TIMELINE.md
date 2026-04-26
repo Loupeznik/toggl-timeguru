@@ -139,12 +139,12 @@
 - [x] Implement check_rate_limit_before_request() with throttling
 - [x] Handle HTTP 402 Payment Required status code
 - [x] Add wait and retry logic for quota exhaustion
-- [ ] Display rate limit info in TUI footer (optional - deferred to v1.2.1)
+- [x] Display rate limit info in TUI footer
 
 ### Testing & Documentation (PARTIALLY COMPLETED)
 - [x] Unit tests for bulk operations and rate limiting
-- [ ] Integration tests with mocked rate limits (deferred to v1.2.1)
-- [ ] Update README and CLAUDE.md with API optimization details (deferred to v1.2.1)
+- [x] Integration tests with mocked rate limits
+- [x] Update README and CLAUDE.md with API optimization details
 - [x] Create API_OPTIMIZATION_ANALYSIS.md document
 
 **Expected Impact:** ✅ ACHIEVED
@@ -153,13 +153,47 @@
 - Starter tier: 20x more operations per hour
 - Premium tier: 12x more operations per hour
 
-## v1.2.1 - Reports & Advanced Filtering (COMPLETED)
+## v1.2.1 - Reports & Advanced Filtering (COMPLETED FOR RELEASE SCOPE)
+### Release Scope Summary
+- [x] Daily, weekly, and monthly report generation
+- [x] Project-specific reports via `--project <id>`
+- [x] Billable vs non-billable report totals and percentages
+- [x] Report rounding options via `--round`, `--round-minutes`, and `--round-mode total|entry`
+- [x] Project and tag multi-select filtering in the TUI
+- [x] Persisted filter state across TUI sessions
+- [x] Active filter indicators in the entry list and filter panel
+- [x] Project selector usage sorting, usage stats, and `config --set-project-sort name|usage`
+- [x] First-letter project selector jumps with repeated-key cycling
+- [x] Main-list `c` hotkey to clear active filters
+
+### Required Non-Deferred v1.2.1 Features
+These are the planned v1.2.1 features that were not deferred and therefore should be included in the v1.2.1 release.
+
+- [x] Report generation for daily, weekly, and monthly periods
+- [x] Project-specific report filtering
+- [x] Billable/non-billable report breakdowns
+- [x] Report rounding controls and rounding mode selection
+- [x] Interactive project filtering in the TUI
+- [x] Interactive tag filtering in the TUI
+- [x] TUI filter persistence and active-filter indicators
+- [x] Project selector usage-based sorting and usage display
+- [x] Project selector first-letter jump/cycle behavior
+- [x] Clear-filters shortcut from the main list
+
+### Deferred Out of v1.2.1
+- [ ] Client filtering UI (deferred until client names/models are available)
+- [ ] Tag counts in the filter panel (deferred to a later polish pass)
+- [x] Live rate-limit quota in the TUI footer
+- [x] Mocked rate-limit integration tests and expanded API optimization docs
+- [ ] Real API rate-limit integration tests (deferred; requires staging account)
+
 ### Report Generation
 - [x] Implement daily summary report
 - [x] Add weekly summary report
 - [x] Create monthly summary report
 - [x] Add project-specific reports (via `--project <id>`)
 - [x] Calculate billable vs non-billable hours
+- [x] Add rounding options for report output
 
 ### Interactive TUI Filtering
 - [x] Add project filtering UI to TUI filter panel (multi-select)
@@ -167,12 +201,14 @@
 - [ ] Add client filtering UI to TUI filter panel (deferred — no Client model yet)
 - [x] Add filter persistence across TUI sessions
 - [x] Add visual indicators for active filters in entry list
+- [x] Add shortcuts to open filters and clear active filters
 
 ### Project Selector Enhancements
 - [x] Sort projects by usage in last month (most used first)
 - [x] Show usage count/percentage per project in selector
 - [x] Add configuration option to toggle sort method
 - [x] Jump to project by first-letter key in selector
+- [x] Cycle matching projects on repeated first-letter key presses
 - [x] `c` hotkey in main entry list clears all active filters
 
 ## v1.2.2 - Smart Search & Fuzzy Matching (PLANNED)

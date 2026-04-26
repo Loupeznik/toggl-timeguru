@@ -7,10 +7,11 @@ A powerful CLI tool for managing and analyzing Toggl Track time entries, built w
 - **Time tracking** from command line - start and stop time entries directly
 - **Sync time entries** from Toggl Track to local SQLite database
 - **Interactive TUI** for browsing time entries with vim-style navigation
-- **Project assignment** directly from TUI with search and batch operations
+- **Project assignment** directly from TUI with search, usage-based sorting, and batch operations
 - **Time entry editing** in TUI for updating descriptions with batch support
 - **Group entries** by description or by description within each day
-- **Filter entries** by date range (project and tag filtering via CLI only)
+- **Filter entries** by date range, project, and tag from CLI and TUI
+- **Summary reports** with daily, weekly, monthly, project, billable, and rounding options
 - **CSV export** with grouping options for external reporting
 - **Duration rounding** (rounds up to next interval) for easy time reporting
 - **Multi-account support** with automatic account detection and switching
@@ -63,6 +64,9 @@ toggl-timeguru config --set-date-range 7
 # Example: 15 rounds to quarter hours (0.25h, 0.5h, 0.75h, 1.0h, etc.)
 toggl-timeguru config --set-round-minutes 15
 
+# Sort the TUI project selector by name or recent usage
+toggl-timeguru config --set-project-sort usage
+
 # Show current configuration
 toggl-timeguru config --show
 ```
@@ -99,6 +103,26 @@ toggl-timeguru list --offline
 toggl-timeguru list --start 2025-01-01 --end 2025-01-31
 ```
 
+#### `report` - Generate summary reports
+
+```bash
+# Daily report for the default date range
+toggl-timeguru report
+
+# Weekly or monthly summaries
+toggl-timeguru report --period weekly
+toggl-timeguru report --period monthly
+
+# Filter a report by project ID
+toggl-timeguru report --project 12345
+
+# Use cached entries and round output to quarter hours
+toggl-timeguru report --offline --round --round-minutes 15
+
+# Choose whether rounding is applied to totals or each entry before aggregation
+toggl-timeguru report --round --round-mode entry
+```
+
 #### `tui` - Interactive terminal UI
 
 ```bash
@@ -118,6 +142,8 @@ toggl-timeguru tui --start 2025-01-01 --end 2025-01-31
 - `d` - Toggle day-based grouping (groups by description within each day)
 - `s` - Toggle date sorting (ascending/descending)
 - `r` - Toggle rounding on/off (default: ON in grouped view)
+- `f` - Open or close the filter panel for billable, project, and tag filters
+- `c` - Clear active filters when filters are applied
 - `p` - Open project selector to assign project (works on individual or grouped entries)
 - `e` - Edit description (works on individual or grouped entries, batch edit supported)
 - `y` - Copy selected entry description to clipboard
@@ -169,6 +195,17 @@ toggl-timeguru track stop
 ```
 
 **Note:** The track command works directly with the Toggl API and requires an active internet connection.
+
+### API Optimization and Rate Limits
+
+Toggl TimeGuru uses Toggl Track's bulk update endpoint for grouped project assignment and description edits. Bulk updates send up to 100 time entries per request, which keeps batch edits usable on lower Toggl API quotas and avoids the old one-request-per-entry behavior.
+
+The app tracks Toggl quota headers when the API returns them:
+
+- `X-Toggl-Quota-Remaining` - requests left in the current quota window
+- `X-Toggl-Quota-Resets-In` - seconds until the quota window resets
+
+When quota is low, the TUI shows warnings before batch edits and displays the latest known API quota in the footer after API responses include quota headers. When quota is exhausted, requests wait for the reset window where possible and surface a clear status or error message instead of repeatedly retrying immediately.
 
 ### Global Options
 
@@ -288,7 +325,7 @@ See [docs/PROGRESS.md](docs/PROGRESS.md) for detailed development progress.
 - ✅ Configuration management
 
 ### Phase 2: Enhanced Functionality (In Progress)
-- ✅ Advanced filtering (CLI only - project, tags via list command)
+- ✅ Advanced filtering (CLI and TUI project/tag filters)
 - ✅ CSV export with grouping options
 - ✅ Enhanced UI with better navigation
 - ✅ Project assignment in TUI
@@ -297,8 +334,9 @@ See [docs/PROGRESS.md](docs/PROGRESS.md) for detailed development progress.
 - ✅ Data management CLI
 - ✅ Time tracking CLI (start/stop commands)
 - ✅ CI/CD & Build Automation
-- Interactive TUI filtering (project, tags, client)
-- Report generation (daily, weekly, monthly)
+- ✅ Report generation (daily, weekly, monthly)
+- ✅ Project selector usage sorting and first-letter jumps
+- Client filtering UI (deferred until client names/models are available)
 - Fuzzy description matching
 - Incremental sync
 
