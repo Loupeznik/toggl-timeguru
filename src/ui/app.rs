@@ -1966,7 +1966,7 @@ impl App {
         let info = self.client.as_ref()?.get_rate_limit_info()?;
         let remaining = info.remaining?;
         match info.resets_in {
-            Some(resets_in) => Some(format!("{remaining} req left, reset in {resets_in}s")),
+            Some(resets_in) => Some(format!("{remaining} req left, resets in {resets_in}s")),
             None => Some(format!("{remaining} req left")),
         }
     }

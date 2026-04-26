@@ -144,7 +144,7 @@
 ### Testing & Documentation (PARTIALLY COMPLETED)
 - [x] Unit tests for bulk operations and rate limiting
 - [x] Integration tests with mocked rate limits
-- [x] Update README and CLAUDE.md with API optimization details
+- [x] Update README and AGENTS.md with API optimization details
 - [x] Create API_OPTIMIZATION_ANALYSIS.md document
 
 **Expected Impact:** ✅ ACHIEVED
@@ -180,12 +180,14 @@ These are the planned v1.2.1 features that were not deferred and therefore shoul
 - [x] Project selector first-letter jump/cycle behavior
 - [x] Clear-filters shortcut from the main list
 
-### Deferred Out of v1.2.1
+### Still Deferred After v1.2.1
 - [ ] Client filtering UI (deferred until client names/models are available)
 - [ ] Tag counts in the filter panel (deferred to a later polish pass)
+- [ ] Real API rate-limit integration tests (deferred to v1.2.2; requires staging account)
+
+### Completed v1.2.1 Follow-up Work
 - [x] Live rate-limit quota in the TUI footer
 - [x] Mocked rate-limit integration tests and expanded API optimization docs
-- [ ] Real API rate-limit integration tests (deferred; requires staging account)
 
 ### Report Generation
 - [x] Implement daily summary report

@@ -219,10 +219,10 @@ This document tracks the development progress across all phases of the Toggl Tim
   - [x] Test partial failure scenarios (structure in place)
   - [x] Test rate limit header extraction
   - [x] Mock API server tests with rate limiting
-  - [ ] Integration tests with real API (staging account) (deferred to v1.2.1)
-- [ ] Documentation
+  - [ ] Integration tests with real API (staging account) (deferred to v1.2.2)
+- [x] Documentation
   - [x] Update README with API optimization information
-  - [x] Document bulk operation usage in CLAUDE.md
+  - [x] Document bulk operation usage in AGENTS.md
   - [x] Add rate limit best practices to documentation
 
 **Expected Impact:**
@@ -246,13 +246,15 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [x] Project selector usage sorting, usage statistics, and sort-method configuration
 - [x] Project selector first-letter jump with repeated-key cycling
 
-**Deferred from v1.2.1 scope:**
+**Still deferred after v1.2.1:**
 - [ ] Show tag counts in the filter panel (deferred to a later polish pass)
 - [ ] Add client filtering UI to the filter panel (deferred until client names/models are available)
+- [ ] Add real API rate-limit integration tests (deferred to v1.2.2; requires staging account)
+
+**Completed v1.2.1 follow-up items:**
 - [x] Display live rate-limit quota in the TUI footer
 - [x] Add mocked API rate-limit integration tests
-- [ ] Add real API rate-limit integration tests (deferred; requires staging account)
-- [x] Expand README/CLAUDE API optimization documentation beyond the existing API optimization analysis document
+- [x] Expand README/AGENTS API optimization documentation beyond the existing API optimization analysis document
 
 ### v1.2.1 Report Generation (COMPLETED)
 - [x] Implement daily summary report

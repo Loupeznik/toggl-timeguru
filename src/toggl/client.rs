@@ -976,7 +976,7 @@ mod tests {
     use chrono::TimeZone;
     use mockito::{Matcher, Server};
 
-    async fn mock_client(server: &Server) -> TogglClient {
+    fn mock_client(server: &Server) -> TogglClient {
         let mut client = TogglClient::new("test_token".to_string()).unwrap();
         client.base_url = format!("{}/api/v9", server.url());
         client
@@ -1060,7 +1060,7 @@ mod tests {
     #[tokio::test]
     async fn test_mocked_rate_limit_headers_are_captured() {
         let mut server = Server::new_async().await;
-        let client = mock_client(&server).await;
+        let client = mock_client(&server);
         let _mock = server
             .mock("GET", "/api/v9/me")
             .with_status(200)
@@ -1083,7 +1083,7 @@ mod tests {
     #[tokio::test]
     async fn test_mocked_rate_limit_response_returns_error() {
         let mut server = Server::new_async().await;
-        let client = mock_client(&server).await;
+        let client = mock_client(&server);
         let _mock = server
             .mock("GET", "/api/v9/me/time_entries")
             .match_query(Matcher::AllOf(vec![
