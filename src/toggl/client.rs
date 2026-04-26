@@ -973,6 +973,14 @@ impl TogglClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
+    use mockito::{Matcher, Server};
+
+    fn mock_client(server: &Server) -> TogglClient {
+        let mut client = TogglClient::new("test_token".to_string()).unwrap();
+        client.base_url = format!("{}/api/v9", server.url());
+        client
+    }
 
     #[test]
     fn test_client_creation() {
@@ -1047,5 +1055,63 @@ mod tests {
         let info = info.unwrap();
         assert!(info.remaining.is_none());
         assert!(info.resets_in.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_mocked_rate_limit_headers_are_captured() {
+        let mut server = Server::new_async().await;
+        let client = mock_client(&server);
+        let _mock = server
+            .mock("GET", "/api/v9/me")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_header("X-Toggl-Quota-Remaining", "7")
+            .with_header("X-Toggl-Quota-Resets-In", "42")
+            .with_body(r#"{"id":123,"email":"user@example.com"}"#)
+            .expect(1)
+            .create_async()
+            .await;
+
+        let user = client.get_current_user().await.unwrap();
+        assert_eq!(user["id"].as_i64(), Some(123));
+
+        let info = client.get_rate_limit_info().unwrap();
+        assert_eq!(info.remaining, Some(7));
+        assert_eq!(info.resets_in, Some(42));
+    }
+
+    #[tokio::test]
+    async fn test_mocked_rate_limit_response_returns_error() {
+        let mut server = Server::new_async().await;
+        let client = mock_client(&server);
+        let _mock = server
+            .mock("GET", "/api/v9/me/time_entries")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("start_date".into(), "2025-01-01".into()),
+                Matcher::UrlEncoded("end_date".into(), "2025-01-02".into()),
+            ]))
+            .with_status(429)
+            .with_header("X-Toggl-Quota-Remaining", "0")
+            .with_header("X-Toggl-Quota-Resets-In", "30")
+            .with_body("rate limited")
+            .expect(1)
+            .create_async()
+            .await;
+
+        let start = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2025, 1, 2, 0, 0, 0).unwrap();
+        let result = client.get_time_entries_with_retry(start, end, 1).await;
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Rate limit exceeded")
+        );
+
+        let info = client.get_rate_limit_info().unwrap();
+        assert_eq!(info.remaining, Some(0));
+        assert_eq!(info.resets_in, Some(30));
     }
 }

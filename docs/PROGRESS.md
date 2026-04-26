@@ -212,24 +212,49 @@ This document tracks the development progress across all phases of the Toggl Tim
   - [x] Add slowdown when approaching limit (< 5 requests remaining)
   - [x] Handle HTTP 402 Payment Required (quota exceeded) status code
   - [x] Implement wait and retry logic for 402 responses
-  - [ ] Display rate limit info in TUI footer (optional - deferred to v1.2.1)
+  - [x] Display rate limit info in TUI footer
 - [x] Testing
   - [x] Add unit tests for bulk update methods
   - [x] Test batch operations with > 100 entries (validation tests)
   - [x] Test partial failure scenarios (structure in place)
   - [x] Test rate limit header extraction
-  - [ ] Mock API server tests with rate limiting (deferred to v1.2.1)
-  - [ ] Integration tests with real API (staging account) (deferred to v1.2.1)
-- [ ] Documentation
-  - [ ] Update README with API optimization information (deferred to v1.2.1)
-  - [ ] Document bulk operation usage in CLAUDE.md (deferred to v1.2.1)
-  - [ ] Add rate limit best practices to documentation (deferred to v1.2.1)
+  - [x] Mock API server tests with rate limiting
+  - [ ] Integration tests with real API (staging account) (deferred to v1.2.2)
+- [x] Documentation
+  - [x] Update README with API optimization information
+  - [x] Document bulk operation usage in AGENTS.md
+  - [x] Add rate limit best practices to documentation
 
 **Expected Impact:**
 - 99% reduction in API calls for batch operations ✅ ACHIEVED
 - Free tier: Usable for batch operations ✅ ACHIEVED
 - Starter tier: 20x more operations per hour ✅ ACHIEVED
 - Premium tier: 12x more operations per hour ✅ ACHIEVED
+
+### v1.2.1 Release Scope
+**Status:** Ready for v1.2.1 once release validation passes. The feature scope below is complete on `master`; deferred ideas are explicitly listed separately so they do not block v1.2.1.
+
+**Required non-deferred v1.2.1 features:**
+- [x] Report generation for daily, weekly, and monthly summaries
+- [x] Project-specific report filtering via `--project <id>`
+- [x] Billable vs non-billable report breakdowns with percentages
+- [x] Report rounding controls, including `--round-minutes` and `--round-mode total|entry`
+- [x] Interactive TUI project filtering with multi-select persistence
+- [x] Interactive TUI tag filtering with multi-select persistence
+- [x] Active-filter indicators in the entry list and filter panel
+- [x] Main-list `c` shortcut to clear active filters
+- [x] Project selector usage sorting, usage statistics, and sort-method configuration
+- [x] Project selector first-letter jump with repeated-key cycling
+
+**Still deferred after v1.2.1:**
+- [ ] Show tag counts in the filter panel (deferred to a later polish pass)
+- [ ] Add client filtering UI to the filter panel (deferred until client names/models are available)
+- [ ] Add real API rate-limit integration tests (deferred to v1.2.2; requires staging account)
+
+**Completed v1.2.1 follow-up items:**
+- [x] Display live rate-limit quota in the TUI footer
+- [x] Add mocked API rate-limit integration tests
+- [x] Expand README/AGENTS API optimization documentation beyond the existing API optimization analysis document
 
 ### v1.2.1 Report Generation (COMPLETED)
 - [x] Implement daily summary report
@@ -246,8 +271,12 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [x] Calculate billable vs non-billable hours
   - [x] Added to all report types
   - [x] Shows percentages of total
+- [x] Add report rounding controls
+  - [x] `--round` uses configured rounding minutes
+  - [x] `--round-minutes <minutes>` overrides the configured interval
+  - [x] `--round-mode total|entry` chooses aggregate-total or per-entry rounding
 
-### v1.2.1 Interactive TUI Filtering (IN PROGRESS)
+### v1.2.1 Interactive TUI Filtering (COMPLETED FOR v1.2.1 SCOPE)
 - [x] Add project filtering UI to TUI filter panel
   - [x] Multi-select project filter (Projects section, Enter/Space to toggle)
   - [x] Visual indication of active filters (● mark on section header, list checkboxes)
@@ -261,8 +290,11 @@ This document tracks the development progress across all phases of the Toggl Tim
 - [x] Add visual indicators for active filters in entry list
   - [x] Status line shows `[FILTERED: ...]` with per-filter breakdown
   - [x] Filter panel title shows active filter count
+- [x] Add filter shortcuts
+  - [x] `f` opens/closes the filter panel
+  - [x] `c` clears filters from the panel or from the main list when filters are active
 
-### v1.2.1 Project Selector Enhancements (IN PROGRESS)
+### v1.2.1 Project Selector Enhancements (COMPLETED)
 - [x] Sort projects by usage in last month
   - [x] Count time entries per project in last 30 days
   - [x] Sort by entry count (most used first)

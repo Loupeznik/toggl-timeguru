@@ -70,6 +70,27 @@ fn sort_projects(projects: &mut [Project], method: ProjectSortMethod, usage: &Ha
     }
 }
 
+fn format_rate_limit_reset_duration(seconds: u32) -> String {
+    let hours = seconds / 3600;
+    let minutes = (seconds % 3600) / 60;
+    let seconds = seconds % 60;
+    let mut parts = Vec::new();
+
+    if hours > 0 {
+        parts.push(format!("{hours}h"));
+    }
+
+    if minutes > 0 {
+        parts.push(format!("{minutes}m"));
+    }
+
+    if seconds > 0 || parts.is_empty() {
+        parts.push(format!("{seconds}s"));
+    }
+
+    parts.join(" ")
+}
+
 pub struct App {
     pub time_entries: Vec<TimeEntry>,
     pub grouped_entries: Vec<GroupedTimeEntry>,
@@ -1962,11 +1983,24 @@ impl App {
         f.render_widget(help_para, chunks[1]);
     }
 
+    fn rate_limit_footer_text(&self) -> Option<String> {
+        let info = self.client.as_ref()?.get_rate_limit_info()?;
+        let remaining = info.remaining?;
+        match info.resets_in {
+            Some(resets_in) => Some(format!(
+                "{remaining} req left, resets in {}",
+                format_rate_limit_reset_duration(resets_in)
+            )),
+            None => Some(format!("{remaining} req left")),
+        }
+    }
+
     fn render_footer(&self, f: &mut Frame, area: Rect) {
         let grouping_status = if self.show_grouped { "ON" } else { "OFF" };
         let day_grouping_status = if self.group_by_day { "ON" } else { "OFF" };
         let sort_status = if self.sort_by_date { "ON" } else { "OFF" };
         let rounding_status = if self.show_rounded { "ON" } else { "OFF" };
+        let rate_limit_indicator = self.rate_limit_footer_text();
         let filter_indicator = if self.active_filter.is_active() {
             let mut parts: Vec<String> = Vec::new();
             if self.active_filter.billable_only {
@@ -2038,6 +2072,16 @@ impl App {
                 )),
             ]),
         ];
+
+        if let Some(rate_limit) = rate_limit_indicator {
+            footer_lines[1]
+                .spans
+                .push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
+            footer_lines[1]
+                .spans
+                .push(Span::styled("API: ", Style::default().fg(Color::Cyan)));
+            footer_lines[1].spans.push(Span::raw(rate_limit));
+        }
 
         if let Some(ref msg) = self.clipboard_message {
             footer_lines.push(Line::from(vec![
@@ -2235,5 +2279,28 @@ impl App {
             .style(Style::default().bg(Color::Black));
 
         f.render_widget(paragraph, inner_area);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_rate_limit_reset_duration;
+
+    #[test]
+    fn formats_rate_limit_reset_duration_as_seconds() {
+        assert_eq!(format_rate_limit_reset_duration(0), "0s");
+        assert_eq!(format_rate_limit_reset_duration(42), "42s");
+    }
+
+    #[test]
+    fn formats_rate_limit_reset_duration_as_minutes_and_seconds() {
+        assert_eq!(format_rate_limit_reset_duration(60), "1m");
+        assert_eq!(format_rate_limit_reset_duration(125), "2m 5s");
+    }
+
+    #[test]
+    fn formats_rate_limit_reset_duration_as_hours_minutes_and_seconds() {
+        assert_eq!(format_rate_limit_reset_duration(3600), "1h");
+        assert_eq!(format_rate_limit_reset_duration(3723), "1h 2m 3s");
     }
 }
